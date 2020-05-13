@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.implementation;
 
-import com.azure.cosmos.Resource;
+import com.azure.cosmos.models.ModelBridgeInternal;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public interface ResourceValidator<T extends Resource> {
-    
+public interface ResourceValidator<T> {
+
     void validate(T v);
 
     class Builder<T extends Resource> {
-        private List<ResourceValidator<? extends Resource>> validators = new ArrayList<>();
+        private List<ResourceValidator<?>> validators = new ArrayList<>();
 
         public ResourceValidator<T> build() {
             return new ResourceValidator<T>() {
@@ -28,25 +28,25 @@ public interface ResourceValidator<T extends Resource> {
                 }
             };
         }
-        
+
         public Builder<T> areEqual(T expectedValue) {
             validators.add(new ResourceValidator<T>() {
                 @Override
                 public void validate(T v) {
-                    
-                    assertThat(v.getMap().keySet())
-                    .describedAs("number of fields").
-                    hasSize(expectedValue.getMap().keySet().size());
-                    expectedValue.getMap().keySet();
-                    for(String key: expectedValue.getMap().keySet()) {
-                        assertThat(expectedValue.get(key))
+
+                    assertThat(ModelBridgeInternal.getMapFromJsonSerializable(v).keySet())
+                        .describedAs("number of fields")
+                        .hasSize(ModelBridgeInternal.getMapFromJsonSerializable(expectedValue).keySet().size());
+                    ModelBridgeInternal.getMapFromJsonSerializable(expectedValue).keySet();
+                    for(String key: ModelBridgeInternal.getMapFromJsonSerializable(expectedValue).keySet()) {
+                        assertThat(ModelBridgeInternal.getObjectFromJsonSerializable(expectedValue, key))
                         .describedAs("value for " + key)
-                        .isEqualTo(expectedValue.get(key));
+                        .isEqualTo(ModelBridgeInternal.getObjectFromJsonSerializable(expectedValue, key));
                     }
                 }
             });
             return this;
         }
-        
+
     }
 }

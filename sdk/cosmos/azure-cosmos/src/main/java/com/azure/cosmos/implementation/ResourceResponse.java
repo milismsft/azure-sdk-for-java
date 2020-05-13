@@ -4,8 +4,7 @@
 package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.CosmosResponseDiagnostics;
-import com.azure.cosmos.Resource;
-import org.apache.commons.lang3.StringUtils;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -257,8 +256,12 @@ public final class ResourceResponse<T extends Resource> {
         return this.response.getResponseHeaders().get(HttpConstants.HttpHeaders.CURRENT_RESOURCE_QUOTA_USAGE);
     }
 
+    public byte[] getBodyAsByteArray() {
+        return this.response.getResponseBodyAsByteArray();
+    }
+
     public String getBodyAsString() {
-        return this.response.getReponseBodyAsString();
+        return this.response.getResponseBodyAsString();
     }
 
     /**
@@ -323,7 +326,7 @@ public final class ResourceResponse<T extends Resource> {
      *
      * @return request diagnostic statistics for the current request to Azure Cosmos DB service.
      */
-    public CosmosResponseDiagnostics getCosmosResponseDiagnostics() {
+    public CosmosResponseDiagnostics getResponseDiagnostics() {
         return this.response.getCosmosResponseRequestDiagnosticStatistics();
     }
 
@@ -352,6 +355,17 @@ public final class ResourceResponse<T extends Resource> {
             return StringUtils.EMPTY;
         }
         return cosmosResponseRequestDiagnosticStatistics.toString();
+    }
+
+    /**
+     * Gets the ETag from the response headers.
+     *
+     * Null in case of delete operation.
+     *
+     * @return ETag
+     */
+    public String getETag() {
+        return this.response.getResponseHeaders().get(HttpConstants.HttpHeaders.E_TAG);
     }
 
     long getCurrentQuotaHeader(String headerName) {

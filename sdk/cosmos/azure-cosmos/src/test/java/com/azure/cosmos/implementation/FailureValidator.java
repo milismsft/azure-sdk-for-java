@@ -4,11 +4,13 @@ package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosClientException;
-import com.azure.cosmos.CosmosError;
+import com.azure.cosmos.models.CosmosError;
 import com.azure.cosmos.implementation.directconnectivity.WFConstants;
+import com.azure.cosmos.models.ModelBridgeInternal;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -79,7 +81,7 @@ public interface FailureValidator {
                     CosmosClientException cosmosClientException = (CosmosClientException) t;
                     long exceptionQuorumAckedLSN = -1;
                     if (cosmosClientException.getResponseHeaders().get(WFConstants.BackendHeaders.QUORUM_ACKED_LSN) != null) {
-                        exceptionQuorumAckedLSN = Long.parseLong((String) cosmosClientException.getResponseHeaders().get(WFConstants.BackendHeaders.QUORUM_ACKED_LSN));
+                        exceptionQuorumAckedLSN = Long.parseLong(cosmosClientException.getResponseHeaders().get(WFConstants.BackendHeaders.QUORUM_ACKED_LSN));
 
                     }
                     assertThat(exceptionQuorumAckedLSN).isNotEqualTo(-1);
@@ -117,7 +119,8 @@ public interface FailureValidator {
                 public void validate(Throwable t) {
                     assertThat(t).isNotNull();
                     assertThat(t).isInstanceOf(CosmosClientException.class);
-                    assertThat(((CosmosClientException) t).getError().toJson()).isEqualTo(cosmosError.toJson());
+                    assertThat(ModelBridgeInternal.toJsonFromJsonSerializable(((CosmosClientException) t).getError()))
+                        .isEqualTo(ModelBridgeInternal.toJsonFromJsonSerializable(cosmosError));
                 }
             });
             return this;
@@ -300,6 +303,20 @@ public interface FailureValidator {
             return this;
         }
 
+        public <T extends Throwable> Builder documentClientExceptionToStringExcludesHeader(String header) {
+            validators.add(new FailureValidator() {
+                @Override
+                public void validate(Throwable t) {
+                    assertThat(t).isNotNull();
+                    assertThat(t).isInstanceOf(CosmosClientException.class);
+                    CosmosClientException ex = (CosmosClientException) t;
+                    String exceptionToString = ex.toString();
+                    assertThat(exceptionToString).doesNotContain(header);
+                }
+            });
+            return this;
+        }
+
         public <T extends Throwable> Builder withRuntimeExceptionMessage(String message) {
             validators.add(new FailureValidator() {
                 @Override
@@ -312,7 +329,7 @@ public interface FailureValidator {
             return this;
         }
 
-        public <T extends Throwable> Builder withRuntimeExceptionClass(Class k) {
+        public <T extends Throwable> Builder withRuntimeExceptionClass(Class<T> k) {
             validators.add(new FailureValidator() {
                 @Override
                 public void validate(Throwable t) {

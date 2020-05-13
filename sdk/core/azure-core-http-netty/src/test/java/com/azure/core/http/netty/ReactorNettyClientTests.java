@@ -35,7 +35,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static com.azure.core.http.netty.NettyAsyncHttpClient.ReactorNettyHttpResponse;
 import static java.time.Duration.ofMillis;
@@ -85,18 +84,32 @@ public class ReactorNettyClientTests {
     }
 
     @Test
+    @Disabled
     public void testMultipleSubscriptionsEmitsError() {
+        /*
+         * This test is being disabled as there is a possible race condition on what is being tested.
+         *
+         * Reactor Netty will throw an exception when multiple subscriptions are made to the same network response at
+         * the same time. An exception won't be thrown if the first subscription has already been completed and cleaned
+         * up when the second subscription is made. In addition to that potential race scenario, there is additional
+         * complexity added when dealing with the response in an EventLoop. When in the EventLoop the subscription isn't
+         * cleaned up synchronously but instead is added as an execution for the EventLoop to trigger some time in the
+         * future. Given that this test will be disabled.
+         */
         HttpResponse response = getResponse(SHORT_BODY_PATH);
         // Subscription:1
-        response.getBodyAsByteArray().block();
+        StepVerifier.create(response.getBodyAsByteArray())
+            .assertNext(bytes -> assertEquals(SHORT_BODY, new String(bytes, StandardCharsets.UTF_8)))
+            .verifyComplete();
 
         // Subscription:2
         StepVerifier.create(response.getBodyAsByteArray())
             .expectNextCount(0)
             // Reactor netty 0.9.0.RELEASE behavior changed - second subscription returns onComplete() instead
             // of throwing an error
-            //.verifyError(IllegalStateException.class);
-            .verifyComplete();
+            // Reactor netty 0.9.7.RELEASE again changed the behavior to return an error on second subscription.
+            .verifyError(IllegalStateException.class);
+            // .verifyComplete();
     }
 
     @Test
@@ -170,7 +183,7 @@ public class ReactorNettyClientTests {
         String contentChunk = "abcdefgh";
         int repetitions = 1000;
         HttpRequest request = new HttpRequest(HttpMethod.POST, url(server, "/shortPost"))
-            .setHeader("Content-Length", String.valueOf(contentChunk.length() * repetitions))
+            .setHeader("Content-Length", String.valueOf(contentChunk.length() * (repetitions + 1)))
             .setBody(Flux.just(contentChunk)
                 .repeat(repetitions)
                 .map(s -> ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8)))
@@ -185,12 +198,10 @@ public class ReactorNettyClientTests {
     public void testServerShutsDownSocketShouldPushErrorToContentFlowable() {
         assertTimeout(ofMillis(5000), () -> {
             CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<Socket> sock = new AtomicReference<>();
             try (ServerSocket ss = new ServerSocket(0)) {
                 Mono.fromCallable(() -> {
                     latch.countDown();
                     Socket socket = ss.accept();
-                    sock.set(socket);
                     // give the client time to get request across
                     Thread.sleep(500);
                     // respond but don't send the complete response
@@ -208,14 +219,12 @@ public class ReactorNettyClientTests {
                     // kill the socket with HTTP response body incomplete
                     socket.close();
                     return 1;
-                })
-                    .subscribeOn(Schedulers.elastic())
-                    .subscribe();
+                }).subscribeOn(Schedulers.elastic()).subscribe();
                 //
                 latch.await();
-                HttpClient client = HttpClient.createDefault();
+                HttpClient client = new NettyAsyncHttpClientBuilder().build();
                 HttpRequest request = new HttpRequest(HttpMethod.GET,
-                    new URL("http://localhost:" + ss.getLocalPort() + "/get"));
+                    new URL("http://localhost:" + ss.getLocalPort() + "/ioException"));
 
                 HttpResponse response = client.send(request).block();
 

@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 package com.azure.cosmos.implementation;
 
-import com.azure.cosmos.RequestVerb;
-
 import java.util.Map;
 
 public interface IAuthorizationTokenProvider {

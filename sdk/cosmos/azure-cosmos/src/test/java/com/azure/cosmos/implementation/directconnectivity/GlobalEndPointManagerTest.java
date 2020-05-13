@@ -3,11 +3,13 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
-import com.azure.cosmos.ConnectionPolicy;
-import com.azure.cosmos.DatabaseAccount;
+import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.implementation.ConnectionPolicy;
+import com.azure.cosmos.implementation.DatabaseAccount;
 import com.azure.cosmos.implementation.Configs;
 import com.azure.cosmos.implementation.DatabaseAccountManagerInternal;
 import com.azure.cosmos.implementation.GlobalEndpointManager;
+import com.azure.cosmos.implementation.LifeCycleUtils;
 import com.azure.cosmos.implementation.routing.LocationCache;
 import org.mockito.Matchers;
 import org.mockito.Mockito;
@@ -17,7 +19,6 @@ import org.testng.annotations.Test;
 import reactor.core.publisher.Flux;
 
 import java.lang.reflect.Field;
-import java.net.URI;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +33,7 @@ public class GlobalEndPointManagerTest {
     protected static final int TIMEOUT = 6000000;
     DatabaseAccountManagerInternal databaseAccountManagerInternal;
 
-    private String dbAccountJson1 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\",\"addresses\":\"//addresses/\"," +
+    static String dbAccountJson1 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\",\"addresses\":\"//addresses/\"," +
         "\"_dbs\":\"//dbs/\",\"writableLocations\":[{\"name\":\"East US\",\"databaseAccountEndpoint\":\"https://testaccount-eastus.documents.azure.com:443/\"}]," +
         "\"readableLocations\":[{\"name\":\"East US\",\"databaseAccountEndpoint\":\"https://testaccount-eastus.documents.azure.com:443/\"},{\"name\":\"East Asia\"," +
         "\"databaseAccountEndpoint\":\"https://testaccount-eastasia.documents.azure.com:443/\"}],\"enableMultipleWriteLocations\":false,\"userReplicationPolicy\":{\"asyncReplication\":false," +
@@ -44,18 +45,18 @@ public class GlobalEndPointManagerTest {
         "\\\"maxSpatialQueryCells\\\":12,\\\"spatialMaxGeometryPointCount\\\":256,\\\"sqlAllowTop\\\":true,\\\"enableSpatialIndexing\\\":true}\"}\n";
 
 
-    private String dbAccountJson2 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\"," +
+    static String dbAccountJson2 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\"," +
         "\"addresses\":\"//addresses/\",\"_dbs\":\"//dbs/\",\"writableLocations\":[{\"name\":\"East Asia\",\"databaseAccountEndpoint\":\"https://testaccount-eastasia.documents.azure" +
         ".com:443/\"}],\"readableLocations\":[{\"name\":\"East Asia\",\"databaseAccountEndpoint\":\"https://testaccount-eastasia.documents.azure.com:443/\"}]," +
-        "\"enableMultipleWriteLocations\":false,\"userReplicationPolicy\":{\"asyncReplication\":false,\"minReplicaSetSize\":3,\"maxReplicasetSize\":4}," +
-        "\"userConsistencyPolicy\":{\"defaultConsistencyLevel\":\"Session\"},\"systemReplicationPolicy\":{\"minReplicaSetSize\":3,\"maxReplicasetSize\":4}," +
+        "\"enableMultipleWriteLocations\":false,\"userReplicationPolicy\":{\"asyncReplication\":false,\"minReplicaSetSize\":3,\"maxReplicasetSize\":5}," +
+        "\"userConsistencyPolicy\":{\"defaultConsistencyLevel\":\"Eventual\"},\"systemReplicationPolicy\":{\"minReplicaSetSize\":3,\"maxReplicasetSize\":5}," +
         "\"readPolicy\":{\"primaryReadCoefficient\":1,\"secondaryReadCoefficient\":1},\"queryEngineConfiguration\":\"{\\\"maxSqlQueryInputLength\\\":262144,\\\"maxJoinsPerSqlQuery\\\":5," +
         "\\\"maxLogicalAndPerSqlQuery\\\":500,\\\"maxLogicalOrPerSqlQuery\\\":500,\\\"maxUdfRefPerSqlQuery\\\":10,\\\"maxInExpressionItemsCount\\\":16000," +
         "\\\"queryMaxInMemorySortDocumentCount\\\":500,\\\"maxQueryRequestTimeoutFraction\\\":0.9,\\\"sqlAllowNonFiniteNumbers\\\":false,\\\"sqlAllowAggregateFunctions\\\":true," +
         "\\\"sqlAllowSubQuery\\\":true,\\\"sqlAllowScalarSubQuery\\\":true,\\\"allowNewKeywords\\\":true,\\\"sqlAllowLike\\\":false,\\\"sqlAllowGroupByClause\\\":true," +
-        "\\\"maxSpatialQueryCells\\\":12,\\\"spatialMaxGeometryPointCount\\\":256,\\\"sqlAllowTop\\\":true,\\\"enableSpatialIndexing\\\":true}\"}";
+        "\\\"maxSpatialQueryCells\\\":12,\\\"spatialMaxGeometryPointCount\\\":256,\\\"sqlAllowTop\\\":true,\\\"enableSpatialIndexing\\\":false}\"}";
 
-    private String dbAccountJson3 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\"," +
+    static String dbAccountJson3 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\"," +
         "\"addresses\":\"//addresses/\",\"_dbs\":\"//dbs/\",\"writableLocations\":[{\"name\":\"West US\",\"databaseAccountEndpoint\":\"https://testaccount-westus.documents.azure" +
         ".com:443/\"}],\"readableLocations\":[{\"name\":\"West US\",\"databaseAccountEndpoint\":\"https://testaccount-westus.documents.azure.com:443/\"}]," +
         "\"enableMultipleWriteLocations\":false,\"userReplicationPolicy\":{\"asyncReplication\":false,\"minReplicaSetSize\":3,\"maxReplicasetSize\":4}," +
@@ -66,7 +67,7 @@ public class GlobalEndPointManagerTest {
         "\\\"sqlAllowSubQuery\\\":true,\\\"sqlAllowScalarSubQuery\\\":true,\\\"allowNewKeywords\\\":true,\\\"sqlAllowLike\\\":false,\\\"sqlAllowGroupByClause\\\":true," +
         "\\\"maxSpatialQueryCells\\\":12,\\\"spatialMaxGeometryPointCount\\\":256,\\\"sqlAllowTop\\\":true,\\\"enableSpatialIndexing\\\":true}\"}";
 
-    private String dbAccountJson4 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\",\"addresses\":\"//addresses/\"," +
+    static String dbAccountJson4 = "{\"_self\":\"\",\"id\":\"testaccount\",\"_rid\":\"testaccount.documents.azure.com\",\"media\":\"//media/\",\"addresses\":\"//addresses/\"," +
         "\"_dbs\":\"//dbs/\",\"writableLocations\":[{\"name\":\"East US\",\"databaseAccountEndpoint\":\"https://testaccount-eastus.documents.azure.com:443/\"},{\"name\":\"East Asia\"," +
         "\"databaseAccountEndpoint\":\"https://testaccount-eastasia.documents.azure.com:443/\"}],\"readableLocations\":[{\"name\":\"East US\"," +
         "\"databaseAccountEndpoint\":\"https://testaccount-eastus.documents.azure.com:443/\"},{\"name\":\"East Asia\",\"databaseAccountEndpoint\":\"https://testaccount-eastasia.documents" +
@@ -121,6 +122,7 @@ public class GlobalEndPointManagerTest {
         isRefreshInBackground = this.getRefreshInBackground(globalEndPointManager);
         Assert.assertFalse(isRefreshing.get());
         Assert.assertTrue(isRefreshInBackground.get());
+        LifeCycleUtils.closeQuietly(globalEndPointManager);
     }
 
     /**
@@ -128,14 +130,14 @@ public class GlobalEndPointManagerTest {
      * switching to different preferredLocation region
      */
     @Test(groups = {"unit"}, timeOut = TIMEOUT)
-    public void refreshLocationAsyncForConnectivityIssueWithPreferredLocation() throws Exception {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setEnableEndpointDiscovery(true);
-        List<String> preferredLocation = new ArrayList<>();
-        preferredLocation.add("East US");
-        preferredLocation.add("East Asia");
-        connectionPolicy.setPreferredLocations(preferredLocation);
-        connectionPolicy.setUsingMultipleWriteLocations(true);
+    public void refreshLocationAsyncForConnectivityIssueWithPreferredRegions() throws Exception {
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(DirectConnectionConfig.getDefaultConfig());
+        connectionPolicy.setEndpointDiscoveryEnabled(true);
+        List<String> preferredRegions = new ArrayList<>();
+        preferredRegions.add("East US");
+        preferredRegions.add("East Asia");
+        connectionPolicy.setPreferredRegions(preferredRegions);
+        connectionPolicy.setMultipleWriteRegionsEnabled(true);
         DatabaseAccount databaseAccount = new DatabaseAccount(dbAccountJson1);
         Mockito.when(databaseAccountManagerInternal.getDatabaseAccountFromEndpoint(Matchers.any())).thenReturn(Flux.just(databaseAccount));
         Mockito.when(databaseAccountManagerInternal.getServiceEndpoint()).thenReturn(new URI("https://testaccount.documents.azure.com:443"));
@@ -174,6 +176,7 @@ public class GlobalEndPointManagerTest {
         isRefreshInBackground = this.getRefreshInBackground(globalEndPointManager);
         Assert.assertFalse(isRefreshing.get());
         Assert.assertTrue(isRefreshInBackground.get());
+        LifeCycleUtils.closeQuietly(globalEndPointManager);
     }
 
     /**
@@ -213,6 +216,7 @@ public class GlobalEndPointManagerTest {
         isRefreshInBackground = this.getRefreshInBackground(globalEndPointManager);
         Assert.assertFalse(isRefreshing.get());
         Assert.assertTrue(isRefreshInBackground.get());
+        LifeCycleUtils.closeQuietly(globalEndPointManager);
     }
 
     /**
@@ -220,9 +224,9 @@ public class GlobalEndPointManagerTest {
      */
     @Test(groups = {"unit"}, timeOut = TIMEOUT)
     public void backgroundRefreshForMultiMaster() throws Exception {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setEnableEndpointDiscovery(true);
-        connectionPolicy.setUsingMultipleWriteLocations(true);
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(DirectConnectionConfig.getDefaultConfig());
+        connectionPolicy.setEndpointDiscoveryEnabled(true);
+        connectionPolicy.setMultipleWriteRegionsEnabled(true);
         DatabaseAccount databaseAccount = new DatabaseAccount(dbAccountJson4);
         Mockito.when(databaseAccountManagerInternal.getDatabaseAccountFromEndpoint(Matchers.any())).thenReturn(Flux.just(databaseAccount));
         Mockito.when(databaseAccountManagerInternal.getServiceEndpoint()).thenReturn(new URI("https://testaccount.documents.azure.com:443"));
@@ -231,6 +235,7 @@ public class GlobalEndPointManagerTest {
 
         AtomicBoolean isRefreshInBackground = getRefreshInBackground(globalEndPointManager);
         Assert.assertFalse(isRefreshInBackground.get());
+        LifeCycleUtils.closeQuietly(globalEndPointManager);
     }
 
     /**
@@ -238,9 +243,9 @@ public class GlobalEndPointManagerTest {
      */
     @Test(groups = {"unit"}, timeOut = TIMEOUT)
     public void startRefreshLocationTimerAsync() throws Exception {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setEnableEndpointDiscovery(true);
-        connectionPolicy.setUsingMultipleWriteLocations(true);
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(DirectConnectionConfig.getDefaultConfig());
+        connectionPolicy.setEndpointDiscoveryEnabled(true);
+        connectionPolicy.setMultipleWriteRegionsEnabled(true);
         DatabaseAccount databaseAccount = new DatabaseAccount(dbAccountJson1);
         Mockito.when(databaseAccountManagerInternal.getDatabaseAccountFromEndpoint(Matchers.any())).thenReturn(Flux.just(databaseAccount));
         Mockito.when(databaseAccountManagerInternal.getServiceEndpoint()).thenReturn(new URI("https://testaccount.documents.azure.com:443"));
@@ -273,6 +278,7 @@ public class GlobalEndPointManagerTest {
         isRefreshing = this.getIsRefreshing(globalEndPointManager);
         isRefreshInBackground = this.getRefreshInBackground(globalEndPointManager);
         Assert.assertFalse(isRefreshing.get());
+        LifeCycleUtils.closeQuietly(globalEndPointManager);
     }
 
     private LocationCache getLocationCache(GlobalEndpointManager globalEndPointManager) throws Exception {
@@ -293,7 +299,9 @@ public class GlobalEndPointManagerTest {
         Field availableReadEndpointByLocationField = DatabaseAccountLocationsInfoClass.getDeclaredField("availableReadEndpointByLocation");
         availableReadEndpointByLocationField.setAccessible(true);
 
-        return (Map<String, URI>) availableWriteEndpointByLocationField.get(locationInfo);
+        @SuppressWarnings("unchecked")
+        Map<String, URI> map = (Map<String, URI>) availableWriteEndpointByLocationField.get(locationInfo);
+        return map;
     }
 
     private Map<String, URI> getAvailableReadEndpointByLocation(LocationCache locationCache) throws Exception {
@@ -305,7 +313,9 @@ public class GlobalEndPointManagerTest {
         Field availableReadEndpointByLocationField = DatabaseAccountLocationsInfoClass.getDeclaredField("availableReadEndpointByLocation");
         availableReadEndpointByLocationField.setAccessible(true);
 
-        return (Map<String, URI>) availableReadEndpointByLocationField.get(locationInfo);
+        @SuppressWarnings("unchecked")
+        Map<String, URI> map = (Map<String, URI>) availableReadEndpointByLocationField.get(locationInfo);
+        return map;
     }
 
     private AtomicBoolean getIsRefreshing(GlobalEndpointManager globalEndPointManager) throws Exception {
@@ -329,9 +339,9 @@ public class GlobalEndPointManagerTest {
     }
 
     private GlobalEndpointManager getGlobalEndPointManager() throws Exception {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setEnableEndpointDiscovery(true);
-        connectionPolicy.setUsingMultipleWriteLocations(true); // currently without this proper, background refresh will not work
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(DirectConnectionConfig.getDefaultConfig());
+        connectionPolicy.setEndpointDiscoveryEnabled(true);
+        connectionPolicy.setMultipleWriteRegionsEnabled(true); // currently without this proper, background refresh will not work
         DatabaseAccount databaseAccount = new DatabaseAccount(dbAccountJson1);
         Mockito.when(databaseAccountManagerInternal.getDatabaseAccountFromEndpoint(Matchers.any())).thenReturn(Flux.just(databaseAccount));
         Mockito.when(databaseAccountManagerInternal.getServiceEndpoint()).thenReturn(new URI("https://testaccount.documents.azure.com:443"));

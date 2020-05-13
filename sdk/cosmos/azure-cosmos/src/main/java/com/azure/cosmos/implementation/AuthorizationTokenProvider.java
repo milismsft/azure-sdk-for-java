@@ -3,8 +3,6 @@
 
 package com.azure.cosmos.implementation;
 
-import com.azure.cosmos.RequestVerb;
-
 import java.util.Map;
 
 /**

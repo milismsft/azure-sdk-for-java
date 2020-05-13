@@ -3,12 +3,9 @@
 
 package com.azure.cosmos.implementation;
 
+import com.azure.cosmos.implementation.apachecommons.collections.list.UnmodifiableList;
 import com.azure.cosmos.implementation.routing.LocationCache;
 import com.azure.cosmos.implementation.routing.LocationHelper;
-import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.ConnectionPolicy;
-import com.azure.cosmos.DatabaseAccount;
-import org.apache.commons.collections4.list.UnmodifiableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -16,7 +13,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
-import java.net.URISyntaxException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -45,18 +41,20 @@ public class GlobalEndpointManager implements AutoCloseable {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Scheduler scheduler = Schedulers.fromExecutor(executor);
     private volatile boolean isClosed;
+    private AtomicBoolean firstTimeDatabaseAccountInitialization = new AtomicBoolean(true);
+    private volatile DatabaseAccount latestDatabaseAccount;
 
     public GlobalEndpointManager(DatabaseAccountManagerInternal owner, ConnectionPolicy connectionPolicy, Configs configs)  {
         this.backgroundRefreshLocationTimeIntervalInMS = configs.getUnavailableLocationsExpirationTimeInSeconds() * 1000;
         try {
             this.locationCache = new LocationCache(
-                    new ArrayList<>(connectionPolicy.getPreferredLocations() != null ?
-                            connectionPolicy.getPreferredLocations():
+                    new ArrayList<>(connectionPolicy.getPreferredRegions() != null ?
+                            connectionPolicy.getPreferredRegions():
                             Collections.emptyList()
                     ),
                     owner.getServiceEndpoint(),
-                    connectionPolicy.getEnableEndpointDiscovery(),
-                    BridgeInternal.getUseMultipleWriteLocations(connectionPolicy),
+                    connectionPolicy.isEndpointDiscoveryEnabled(),
+                    connectionPolicy.isMultipleWriteRegionsEnabled(),
                     configs);
 
             this.owner = owner;
@@ -121,7 +119,7 @@ public class GlobalEndpointManager implements AutoCloseable {
         this.locationCache.markEndpointUnavailableForWrite(endpoint);
     }
 
-    public boolean CanUseMultipleWriteLocations(RxDocumentServiceRequest request) {
+    public boolean canUseMultipleWriteLocations(RxDocumentServiceRequest request) {
         return this.locationCache.canUseMultipleWriteLocations(request);
     }
 
@@ -138,7 +136,7 @@ public class GlobalEndpointManager implements AutoCloseable {
             if (forceRefresh) {
                 Mono<DatabaseAccount> databaseAccountObs = getDatabaseAccountFromAnyLocationsAsync(
                     this.defaultEndpoint,
-                    new ArrayList<>(this.connectionPolicy.getPreferredLocations()),
+                    new ArrayList<>(this.connectionPolicy.getPreferredRegions()),
                     this::getDatabaseAccountAsync);
 
                 return databaseAccountObs.map(dbAccount -> {
@@ -159,6 +157,16 @@ public class GlobalEndpointManager implements AutoCloseable {
         });
     }
 
+    /**
+     * This will provide the latest databaseAccount.
+     * If due to some reason last databaseAccount update was null,
+     * this method will return previous valid value
+     * @return DatabaseAccount
+     */
+    public DatabaseAccount getLatestDatabaseAccount() {
+        return this.latestDatabaseAccount;
+    }
+
     private Mono<Void> refreshLocationPrivateAsync(DatabaseAccount databaseAccount) {
         return Mono.defer(() -> {
             logger.debug("refreshLocationPrivateAsync() refreshing locations");
@@ -176,7 +184,7 @@ public class GlobalEndpointManager implements AutoCloseable {
 
                     Mono<DatabaseAccount> databaseAccountObs = getDatabaseAccountFromAnyLocationsAsync(
                             this.defaultEndpoint,
-                            new ArrayList<>(this.connectionPolicy.getPreferredLocations()),
+                            new ArrayList<>(this.connectionPolicy.getPreferredRegions()),
                             this::getDatabaseAccountAsync);
 
                     return databaseAccountObs.map(dbAccount -> {
@@ -236,7 +244,7 @@ public class GlobalEndpointManager implements AutoCloseable {
                             }
 
                             logger.debug("startRefreshLocationTimerAsync() - Invoking refresh, I was registered on [{}]", now);
-                            Mono<DatabaseAccount> databaseAccountObs = GlobalEndpointManager.getDatabaseAccountFromAnyLocationsAsync(this.defaultEndpoint, new ArrayList<>(this.connectionPolicy.getPreferredLocations()),
+                            Mono<DatabaseAccount> databaseAccountObs = GlobalEndpointManager.getDatabaseAccountFromAnyLocationsAsync(this.defaultEndpoint, new ArrayList<>(this.connectionPolicy.getPreferredRegions()),
                                     this::getDatabaseAccountAsync);
 
                             return databaseAccountObs.flatMap(dbAccount -> {
@@ -254,7 +262,13 @@ public class GlobalEndpointManager implements AutoCloseable {
 
     private Mono<DatabaseAccount> getDatabaseAccountAsync(URI serviceEndpoint) {
         return this.owner.getDatabaseAccountFromEndpoint(serviceEndpoint)
-            .doOnNext(i -> logger.debug("account retrieved: {}", i)).single();
+            .doOnNext(databaseAccount -> {
+                if(databaseAccount != null) {
+                    this.latestDatabaseAccount = databaseAccount;
+                }
+
+                logger.debug("account retrieved: {}", databaseAccount);
+            }).single();
     }
 
     public boolean isClosed() {

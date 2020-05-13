@@ -3,14 +3,11 @@
 
 package com.azure.ai.textanalytics.models;
 
-import com.azure.core.annotation.Immutable;
-
 import java.util.Locale;
 
 /**
  * Contains an input document to be analyzed by the service.
  */
-@Immutable
 public final class TextDocumentInput {
 
     /*
@@ -19,7 +16,7 @@ public final class TextDocumentInput {
     private final String id;
 
     /*
-     * The input text to process.
+     * The document to process.
      */
     private final String text;
 
@@ -28,44 +25,32 @@ public final class TextDocumentInput {
      * For example, use "en" for English; "es" for Spanish etc. If not set, use
      * "en" for English as default.
      */
-    private final String language;
+    private String language;
 
     /**
-     * Creates a {@code TextDocumentInput} model that describes the text inputs.
+     * Creates a {@code TextDocumentInput} model that describes the documents.
      *
-     * @param id a unique, non-empty document identifier
-     * @param text the input text to process
+     * @param id A unique, non-empty document identifier.
+     * @param text The document to process.
      */
     public TextDocumentInput(String id, String text) {
-        this(id, text, null);
-    }
-
-    /**
-     * Creates a {@code TextDocumentInput} model that describes the text inputs.
-     *
-     * @param id a unique, non-empty document identifier
-     * @param text the input text to process
-     * @param language Optional. This is the 2 letter ISO 639-1 representation of a language
-     */
-    public TextDocumentInput(String id, String text, String language) {
         this.id = id;
         this.text = text;
-        this.language = language;
     }
 
     /**
      * Get the id property: A unique, non-empty document identifier.
      *
-     * @return the id value.
+     * @return The id value.
      */
     public String getId() {
         return this.id;
     }
 
     /**
-     * Get the text property: The input text to process.
+     * Get the text property: The document to process.
      *
-     * @return the text value.
+     * @return The text value.
      */
     public String getText() {
         return this.text;
@@ -76,10 +61,24 @@ public final class TextDocumentInput {
      * representation of a language. For example, use "en" for English; "es"
      * for Spanish etc. If not set, use "en" for English as default.
      *
-     * @return the language value.
+     * @return The language value.
      */
     public String getLanguage() {
         return this.language;
+    }
+
+    /**
+     * Set the language property: (Optional) This is the 2 letter ISO 639-1
+     * representation of a language. For example, use "en" for English; "es"
+     * for Spanish etc. If not set, use "en" for English as default.
+     *
+     * @param language Optional. This is the 2 letter ISO 639-1 representation of a language.
+     *
+     * @return The object {@link TextDocumentInput} itself.
+     */
+    public TextDocumentInput setLanguage(String language) {
+        this.language = language;
+        return this;
     }
 
     @Override

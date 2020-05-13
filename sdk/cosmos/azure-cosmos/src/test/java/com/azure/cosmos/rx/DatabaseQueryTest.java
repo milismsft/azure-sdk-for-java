@@ -5,19 +5,18 @@ package com.azure.cosmos.rx;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncDatabase;
 import com.azure.cosmos.CosmosClientBuilder;
-import com.azure.cosmos.CosmosContinuablePagedFlux;
 import com.azure.cosmos.CosmosDatabaseForTest;
-import com.azure.cosmos.CosmosDatabaseProperties;
-import com.azure.cosmos.FeedOptions;
-import com.azure.cosmos.FeedResponse;
 import com.azure.cosmos.implementation.FeedResponseListValidator;
 import com.azure.cosmos.implementation.FeedResponseValidator;
+import com.azure.cosmos.models.CosmosDatabaseProperties;
+import com.azure.cosmos.models.FeedOptions;
+import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.util.CosmosPagedFlux;
 import org.apache.commons.lang3.StringUtils;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
-import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +44,7 @@ public class DatabaseQueryTest extends TestSuiteBase {
 
         FeedOptions options = new FeedOptions();
         int maxItemCount = 2;
-        CosmosContinuablePagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
+        CosmosPagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
 
         List<CosmosDatabaseProperties> expectedDatabases = createdDatabases.stream()
                                                                            .filter(d -> StringUtils.equals(databaseId1, d.getId()) ).map(d -> d.read().block().getProperties()).collect(Collectors.toList());
@@ -74,7 +73,7 @@ public class DatabaseQueryTest extends TestSuiteBase {
 
         FeedOptions options = new FeedOptions();
         int maxItemCount = 2;
-        CosmosContinuablePagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
+        CosmosPagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
 
         List<CosmosDatabaseProperties> expectedDatabases = createdDatabases.stream().map(d -> d.read().block().getProperties()).collect(Collectors.toList());
 
@@ -98,7 +97,7 @@ public class DatabaseQueryTest extends TestSuiteBase {
 
         String query = "SELECT * from root r where r.id = '2'";
         FeedOptions options = new FeedOptions();
-        CosmosContinuablePagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
+        CosmosPagedFlux<CosmosDatabaseProperties> queryObservable = client.queryDatabases(query, options);
 
         FeedResponseListValidator<CosmosDatabaseProperties> validator = new FeedResponseListValidator.Builder<CosmosDatabaseProperties>()
                 .containsExactly(new ArrayList<>())
@@ -111,7 +110,7 @@ public class DatabaseQueryTest extends TestSuiteBase {
 
     @BeforeClass(groups = { "simple" }, timeOut = SETUP_TIMEOUT)
     public void before_DatabaseQueryTest() throws Exception {
-        client = clientBuilder().buildAsyncClient();
+        client = getClientBuilder().buildAsyncClient();
         createdDatabases.add(createDatabase(client, databaseId1));
         createdDatabases.add(createDatabase(client, databaseId2));
     }

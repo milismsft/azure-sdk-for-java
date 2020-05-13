@@ -4,7 +4,7 @@
 package com.azure.cosmos.implementation.directconnectivity;
 
 
-import com.azure.cosmos.ConnectionPolicy;
+import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.GlobalEndpointManager;
 import com.azure.cosmos.implementation.IAuthorizationTokenProvider;
@@ -65,7 +65,7 @@ public class GlobalAddressResolver implements IAddressResolver {
         this.routingMapProvider = routingMapProvider;
         this.serviceConfigReader = serviceConfigReader;
 
-        int maxBackupReadEndpoints = (connectionPolicy.getEnableReadRequestsFallback() == null || connectionPolicy.getEnableReadRequestsFallback()) ? GlobalAddressResolver.MaxBackupReadRegions : 0;
+        int maxBackupReadEndpoints = (connectionPolicy.isReadRequestsFallbackEnabled()) ? GlobalAddressResolver.MaxBackupReadRegions : 0;
         this.maxEndpoints = maxBackupReadEndpoints + 2; // for write and alternate write getEndpoint (during failover)
         this.addressCacheByEndpoint = new ConcurrentHashMap<>();
 
@@ -78,7 +78,7 @@ public class GlobalAddressResolver implements IAddressResolver {
     }
 
     Mono<Void> openAsync(DocumentCollection collection) {
-        Mono<Utils.ValueHolder<CollectionRoutingMap>> routingMap = this.routingMapProvider.tryLookupAsync(collection.getId(), null, null);
+        Mono<Utils.ValueHolder<CollectionRoutingMap>> routingMap = this.routingMapProvider.tryLookupAsync(null, collection.getId(), null, null);
         return routingMap.flatMap(collectionRoutingMap -> {
 
             if ( collectionRoutingMap.v == null) {
@@ -88,10 +88,11 @@ public class GlobalAddressResolver implements IAddressResolver {
             List<PartitionKeyRangeIdentity> ranges = collectionRoutingMap.v.getOrderedPartitionKeyRanges().stream().map(range ->
                     new PartitionKeyRangeIdentity(collection.getResourceId(), range.getId())).collect(Collectors.toList());
             List<Mono<Void>> tasks = new ArrayList<>();
-            Mono<Void>[] array = new Mono[this.addressCacheByEndpoint.values().size()];
             for (EndpointCache endpointCache : this.addressCacheByEndpoint.values()) {
                 tasks.add(endpointCache.addressCache.openAsync(collection, ranges));
             }
+            @SuppressWarnings({"rawtypes", "unchecked"})
+            Mono<Void>[] array = new Mono[this.addressCacheByEndpoint.values().size()];
             return Flux.mergeDelayError(Queues.SMALL_BUFFER_SIZE, tasks.toArray(array)).then();
         });
     }
@@ -125,7 +126,7 @@ public class GlobalAddressResolver implements IAddressResolver {
         });
 
         if (this.addressCacheByEndpoint.size() > this.maxEndpoints) {
-            List<URI> allEndpoints = new ArrayList(this.endpointManager.getWriteEndpoints());
+            List<URI> allEndpoints = new ArrayList<>(this.endpointManager.getWriteEndpoints());
             allEndpoints.addAll(this.endpointManager.getReadEndpoints());
             Collections.reverse(allEndpoints);
             LinkedList<URI> endpoints = new LinkedList<>(allEndpoints);

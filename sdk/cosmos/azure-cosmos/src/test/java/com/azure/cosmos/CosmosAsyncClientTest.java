@@ -3,6 +3,7 @@
 
 package com.azure.cosmos;
 
+import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.implementation.guava27.Strings;
 import org.testng.ITest;
 import org.testng.annotations.AfterMethod;
@@ -23,8 +24,12 @@ public abstract class CosmosAsyncClientTest implements ITest {
         this.clientBuilder = clientBuilder;
     }
 
-    public final CosmosClientBuilder clientBuilder() {
+    public final CosmosClientBuilder getClientBuilder() {
         return this.clientBuilder;
+    }
+
+    public final ConnectionPolicy getConnectionPolicy() {
+        return this.clientBuilder.getConnectionPolicy();
     }
 
     @Override

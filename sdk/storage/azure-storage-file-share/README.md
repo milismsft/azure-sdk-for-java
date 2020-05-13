@@ -17,14 +17,14 @@ Shares provide a way to organize sets of files and also can be mounted as an SMB
 - [Azure Subscription][azure_subscription]
 - [Create Storage Account][storage_account]
 
-### Adding the package to your product
+### Include the package
 
 [//]: # ({x-version-update-start;com.azure:azure-storage-file-share;current})
 ```xml
 <dependency>
   <groupId>com.azure</groupId>
   <artifactId>azure-storage-file-share</artifactId>
-  <version>12.2.0</version>
+  <version>12.4.1</version>
 </dependency>
 ```
 [//]: # ({x-version-update-end})
@@ -32,10 +32,11 @@ Shares provide a way to organize sets of files and also can be mounted as an SMB
 ### Create a Storage Account
 To create a Storage Account you can use the Azure Portal or [Azure CLI][azure_cli].
 
-```powershell
-az group create \
-    --name storage-resource-group \
-    --location westus
+```bash
+az storage account create \
+    --resource-group <resource-group-name> \
+    --name <storage-account-name> \
+    --location <location>
 ```
 
 ### Authenticate the client
@@ -450,14 +451,14 @@ fileClient.setHttpHeaders(newFileSize, httpHeaders);
 When you interact with file using this Java client library, errors returned by the service correspond to the same HTTP status codes returned for [REST API][storage_file_rest] requests. For example, if you try to retrieve a share that doesn't exist in your Storage Account, a `404` error is returned, indicating `Not Found`.
 
 ### Default HTTP Client
-All client libraries by default use the Netty HTTP client. Adding the above dependency will automatically configure 
+All client libraries by default use the Netty HTTP client. Adding the above dependency will automatically configure
 the client library to use the Netty HTTP client. Configuring or changing the HTTP client is detailed in the
 [HTTP clients wiki](https://github.com/Azure/azure-sdk-for-java/wiki/HTTP-clients).
 
 ### Default SSL library
-All client libraries, by default, use the Tomcat-native Boring SSL library to enable native-level performance for SSL 
-operations. The Boring SSL library is an uber jar containing native libraries for Linux / macOS / Windows, and provides 
-better performance compared to the default SSL implementation within the JDK. For more information, including how to 
+All client libraries, by default, use the Tomcat-native Boring SSL library to enable native-level performance for SSL
+operations. The Boring SSL library is an uber jar containing native libraries for Linux / macOS / Windows, and provides
+better performance compared to the default SSL implementation within the JDK. For more information, including how to
 reduce the dependency size, refer to the [performance tuning][performance_tuning] section of the wiki.
 
 ## Next steps

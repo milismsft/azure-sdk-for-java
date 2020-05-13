@@ -3,10 +3,9 @@
 package com.azure.cosmos.implementation.changefeed.implementation;
 
 import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.ChangeFeedOptions;
+import com.azure.cosmos.implementation.ChangeFeedOptions;
 import com.azure.cosmos.CosmosClientException;
-import com.azure.cosmos.implementation.CosmosItemProperties;
-import com.azure.cosmos.FeedResponse;
+import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.implementation.changefeed.CancellationToken;
 import com.azure.cosmos.implementation.changefeed.ChangeFeedContextClient;
 import com.azure.cosmos.implementation.changefeed.ChangeFeedObserver;
@@ -27,7 +26,6 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 
-import static com.azure.cosmos.CommonsBridgeInternal.partitionKeyRangeIdInternal;
 import static java.time.temporal.ChronoUnit.MILLIS;
 
 /**
@@ -56,7 +54,7 @@ class PartitionProcessorImpl implements PartitionProcessor {
 
         this.options = new ChangeFeedOptions();
         this.options.setMaxItemCount(settings.getMaxItemCount());
-        partitionKeyRangeIdInternal(this.options, settings.getPartitionKeyRangeId());
+        this.options.setPartitionKeyRangeId(settings.getPartitionKeyRangeId());
         // this.setOptions.getSessionToken(getProperties.getSessionToken());
         this.options.setStartFromBeginning(settings.isStartFromBeginning());
         this.options.setRequestContinuation(settings.getStartContinuation());
@@ -127,19 +125,22 @@ class PartitionProcessorImpl implements PartitionProcessor {
 
                     CosmosClientException clientException = (CosmosClientException) throwable;
                     logger.warn("CosmosClientException: partition {} from thread {}",
-                        BridgeInternal.getPartitionKeyInternal(this.options.getPartitionKey()), Thread.currentThread().getId(), clientException);
+                        this.settings.getPartitionKeyRangeId(), Thread.currentThread().getId(), clientException);
                     StatusCodeErrorType docDbError = ExceptionClassifier.classifyClientException(clientException);
 
                     switch (docDbError) {
                         case PARTITION_NOT_FOUND: {
                             this.resultException = new PartitionNotFoundException("Partition not found.", this.lastContinuation);
                         }
+                        break;
                         case PARTITION_SPLIT: {
                             this.resultException = new PartitionSplitException("Partition split.", this.lastContinuation);
                         }
+                        break;
                         case UNDEFINED: {
                             this.resultException = new RuntimeException(clientException);
                         }
+                        break;
                         case MAX_ITEM_COUNT_TOO_LARGE: {
                             if (this.options.getMaxItemCount() == null) {
                                 this.options.setMaxItemCount(DefaultMaxItemCount);
@@ -154,17 +155,18 @@ class PartitionProcessorImpl implements PartitionProcessor {
                         }
                         case TRANSIENT_ERROR: {
                             // Retry on transient (429) errors
-                            if (clientException.getRetryAfterInMilliseconds() > 0) {
-                                ZonedDateTime stopTimer = ZonedDateTime.now().plus(clientException.getRetryAfterInMilliseconds(), MILLIS);
-                                return Mono.just(clientException.getRetryAfterInMilliseconds()) // set some seed value to be able to run
-                                    // the repeat loop
-                                    .delayElement(Duration.ofMillis(100))
-                                    .repeat(() -> {
+                            if (clientException.getRetryAfterDuration().toMillis() > 0) {
+                                ZonedDateTime stopTimer = ZonedDateTime.now().plus(clientException.getRetryAfterDuration().toMillis(), MILLIS);
+                                return Mono.just(clientException.getRetryAfterDuration().toMillis()) // set some seed value to be able to run
+                                           // the repeat loop
+                                           .delayElement(Duration.ofMillis(100))
+                                           .repeat(() -> {
                                         ZonedDateTime currentTime = ZonedDateTime.now();
                                         return !cancellationToken.isCancellationRequested() && currentTime.isBefore(stopTimer);
                                     }).flatMap(values -> Flux.empty());
                             }
                         }
+                        break;
                         default: {
                             logger.error("Unrecognized Cosmos exception returned error code {}", docDbError, clientException);
                             this.resultException = new RuntimeException(clientException);
@@ -172,7 +174,7 @@ class PartitionProcessorImpl implements PartitionProcessor {
                     }
                 } else if (throwable instanceof LeaseLostException) {
                         logger.info("LeaseLoseException with partition {} from thread {}",
-                            BridgeInternal.getPartitionKeyInternal(this.options.getPartitionKey()), Thread.currentThread().getId());
+                            this.settings.getPartitionKeyRangeId(), Thread.currentThread().getId());
                         this.resultException = (LeaseLostException) throwable;
                 } else if (throwable instanceof TaskCancelledException) {
                     logger.debug("Task cancelled exception: partition {} from {}",

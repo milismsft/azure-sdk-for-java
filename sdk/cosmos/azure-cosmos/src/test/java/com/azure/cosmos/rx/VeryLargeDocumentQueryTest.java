@@ -5,12 +5,12 @@ package com.azure.cosmos.rx;
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.CosmosAsyncItemResponse;
+import com.azure.cosmos.models.CosmosAsyncItemResponse;
 import com.azure.cosmos.CosmosClientBuilder;
-import com.azure.cosmos.CosmosContinuablePagedFlux;
+import com.azure.cosmos.util.CosmosPagedFlux;
 import com.azure.cosmos.implementation.CosmosItemProperties;
-import com.azure.cosmos.CosmosItemRequestOptions;
-import com.azure.cosmos.FeedOptions;
+import com.azure.cosmos.models.CosmosItemRequestOptions;
+import com.azure.cosmos.models.FeedOptions;
 import org.apache.commons.lang3.StringUtils;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -39,9 +39,6 @@ public class VeryLargeDocumentQueryTest extends TestSuiteBase {
         super(clientBuilder);
     }
 
-    // TODO (DANOBLE) VeryLargeDocumentQueryTest::queryLargeDocuments intermittently times out
-    //  Move this test back into the emulator group after we've addressed query performance on 4.X.
-    //  see https://github.com/Azure/azure-sdk-for-java/issues/6377
     @Test(groups = { "simple" }, timeOut = 2 * TIMEOUT)
     public void queryLargeDocuments() {
 
@@ -53,7 +50,7 @@ public class VeryLargeDocumentQueryTest extends TestSuiteBase {
 
         FeedOptions options = new FeedOptions();
         
-        CosmosContinuablePagedFlux<CosmosItemProperties> feedResponseFlux = createdCollection.queryItems("SELECT * FROM r",
+        CosmosPagedFlux<CosmosItemProperties> feedResponseFlux = createdCollection.queryItems("SELECT * FROM r",
             options, CosmosItemProperties.class);
 
         AtomicInteger totalCount = new AtomicInteger();
@@ -83,11 +80,9 @@ public class VeryLargeDocumentQueryTest extends TestSuiteBase {
                     .verify(Duration.ofMillis(subscriberValidationTimeout));
     }
 
-    // TODO (DANOBLE) beforeClass method intermittently times out within the SETUP_TIMEOUT interval.
-    //  see see https://github.com/Azure/azure-sdk-for-java/issues/6377
     @BeforeClass(groups = { "simple" }, timeOut = 2 * SETUP_TIMEOUT)
     public void before_VeryLargeDocumentQueryTest() {
-        client = clientBuilder().buildAsyncClient();
+        client = getClientBuilder().buildAsyncClient();
         createdCollection = getSharedMultiPartitionCosmosContainer(client);
         truncateCollection(createdCollection);
     }

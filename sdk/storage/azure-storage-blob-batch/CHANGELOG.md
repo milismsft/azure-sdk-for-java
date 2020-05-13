@@ -1,7 +1,17 @@
 # Release History
 
-## 12.4.0-beta.2 (Unreleased)
+## 12.6.0-beta.1 (Unreleased)
 
+
+## 12.5.1 (2020-05-06)
+- Updated `azure-core` version to `1.5.0` to pickup fixes for percent encoding `UTF-8` and invalid leading bytes in a body string.
+
+## 12.5.0 (2020-04-06)
+- Fixed a bug where the Date header wouldn't be updated with a new value on request retry.
+
+## 12.4.0 (2020-03-11)
+- Fixed bug where Blob Batch would fail when using AAD authorization.
+- Updated `azure-storage-blob` to version 12.5.0
 
 ## 12.4.0-beta.1 (2020-02-12)
 - Updated `azure-storage-blob` to version 12.4.0

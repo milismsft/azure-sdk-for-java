@@ -3,28 +3,29 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
-import com.azure.cosmos.BadRequestException;
-import com.azure.cosmos.ConflictException;
+import com.azure.cosmos.implementation.BadRequestException;
+import com.azure.cosmos.implementation.ConflictException;
 import com.azure.cosmos.CosmosClientException;
 import com.azure.cosmos.CosmosKeyCredential;
-import com.azure.cosmos.ForbiddenException;
-import com.azure.cosmos.GoneException;
-import com.azure.cosmos.InternalServerErrorException;
-import com.azure.cosmos.InvalidPartitionException;
-import com.azure.cosmos.LockedException;
-import com.azure.cosmos.MethodNotAllowedException;
-import com.azure.cosmos.NotFoundException;
-import com.azure.cosmos.PartitionIsMigratingException;
-import com.azure.cosmos.PartitionKeyRangeGoneException;
-import com.azure.cosmos.PartitionKeyRangeIsSplittingException;
-import com.azure.cosmos.PreconditionFailedException;
-import com.azure.cosmos.RequestEntityTooLargeException;
-import com.azure.cosmos.RequestRateTooLargeException;
-import com.azure.cosmos.RequestTimeoutException;
-import com.azure.cosmos.RequestVerb;
-import com.azure.cosmos.RetryWithException;
-import com.azure.cosmos.ServiceUnavailableException;
-import com.azure.cosmos.UnauthorizedException;
+import com.azure.cosmos.implementation.ConnectionPolicy;
+import com.azure.cosmos.implementation.ForbiddenException;
+import com.azure.cosmos.implementation.GoneException;
+import com.azure.cosmos.implementation.InternalServerErrorException;
+import com.azure.cosmos.implementation.InvalidPartitionException;
+import com.azure.cosmos.implementation.LockedException;
+import com.azure.cosmos.implementation.MethodNotAllowedException;
+import com.azure.cosmos.implementation.NotFoundException;
+import com.azure.cosmos.implementation.PartitionIsMigratingException;
+import com.azure.cosmos.implementation.PartitionKeyRangeGoneException;
+import com.azure.cosmos.implementation.PartitionKeyRangeIsSplittingException;
+import com.azure.cosmos.implementation.PreconditionFailedException;
+import com.azure.cosmos.implementation.RequestEntityTooLargeException;
+import com.azure.cosmos.implementation.RequestRateTooLargeException;
+import com.azure.cosmos.implementation.RequestTimeoutException;
+import com.azure.cosmos.implementation.RequestVerb;
+import com.azure.cosmos.implementation.RetryWithException;
+import com.azure.cosmos.implementation.ServiceUnavailableException;
+import com.azure.cosmos.implementation.UnauthorizedException;
 import com.azure.cosmos.implementation.BaseAuthorizationTokenProvider;
 import com.azure.cosmos.implementation.FailureValidator;
 import com.azure.cosmos.implementation.OperationType;
@@ -47,8 +48,8 @@ import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdRequestTime
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdResponse;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdResponseDecoder;
 import com.azure.cosmos.implementation.directconnectivity.rntbd.RntbdUUID;
-import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableMap;
+import com.azure.cosmos.implementation.guava25.base.Strings;
+import com.azure.cosmos.implementation.guava25.collect.ImmutableMap;
 import io.micrometer.core.instrument.Tag;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -75,7 +76,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders;
-import static com.azure.cosmos.implementation.HttpConstants.HttpMethods;
 import static com.azure.cosmos.implementation.HttpConstants.SubStatusCodes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.testng.Assert.assertEquals;
@@ -609,7 +609,9 @@ public final class RntbdTransportClientTest {
     @Test(enabled = false, groups = "direct")
     public void verifyGoneResponseMapsToGoneException() throws Exception {
 
-        final RntbdTransportClient.Options options = new RntbdTransportClient.Options.Builder(requestTimeout).build();
+        ConnectionPolicy connectionPolicy = ConnectionPolicy.getDefaultPolicy();
+        connectionPolicy.setRequestTimeout(requestTimeout);
+        final RntbdTransportClient.Options options = new RntbdTransportClient.Options.Builder(connectionPolicy).build();
         final SslContext sslContext = SslContextBuilder.forClient().build();
 
         try (final RntbdTransportClient transportClient = new RntbdTransportClient(options, sslContext)) {
@@ -695,9 +697,10 @@ public final class RntbdTransportClientTest {
         final RntbdResponse response
     ) {
         final UserAgentContainer userAgent = new UserAgentContainer();
-        final Duration timeout = Duration.ofMillis(1000);
+        ConnectionPolicy connectionPolicy = ConnectionPolicy.getDefaultPolicy();
+        connectionPolicy.setRequestTimeout(Duration.ofMillis(1000));
 
-        try (final RntbdTransportClient client = getRntbdTransportClientUnderTest(userAgent, timeout, response)) {
+        try (final RntbdTransportClient client = getRntbdTransportClientUnderTest(userAgent, connectionPolicy, response)) {
 
             final Mono<StoreResponse> responseMono;
 
@@ -713,11 +716,11 @@ public final class RntbdTransportClientTest {
 
     private static RntbdTransportClient getRntbdTransportClientUnderTest(
         final UserAgentContainer userAgent,
-        final Duration requestTimeout,
+        final ConnectionPolicy connectionPolicy,
         final RntbdResponse expected
     ) {
 
-        final RntbdTransportClient.Options options = new RntbdTransportClient.Options.Builder(requestTimeout)
+        final RntbdTransportClient.Options options = new RntbdTransportClient.Options.Builder(connectionPolicy)
             .userAgent(userAgent)
             .build();
 

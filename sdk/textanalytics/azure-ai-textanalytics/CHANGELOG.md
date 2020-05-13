@@ -1,7 +1,60 @@
 # Release History
 
-## 1.0.0-beta.3 (Unreleased)
+## 1.0.0-beta.5 (Unreleased)
+**New features**
+- Added Text property and `getText()` to `SentenceSentiment`.
+- `Warnings` property added to each document-level response object returned from the endpoints. It is a list of `TextAnalyticsWarnings`.
+- Added `CategorizedEntityCollection`, `KeyPhrasesCollection`, `LinkedEntityCollection` for having `getWarnings()` to retrieve warnings. 
+- Added a new enum value `ADDRESS` to `EntityCategory`.
+- Text analytics SDK update the service to version `v3.0` from `v3.0-preview.1`.
 
+**Breaking changes**
+- Renamed `apiKey()` to `credential()` on TextAnalyticsClientBuilder.
+- Removed `getGraphemeLength()` and `getGraphemeOffset()` from `CategorizedEntity`, `SentenceSentiment`, and `LinkedEntityMatch`.
+- `getGraphemeCount()` in `TextDocumentStatistics` has been renamed to `getCharacterCount()`.
+- `getScore()` in `DetectedLanguage` has been renamed to `getConfidenceScore()`.
+- `getSubCategory()` in `CategorizedEntity` has been renamed to `getSubcategory()`.
+- `getLinkedEntityMatches()` in `LinkedEntity` has been renamed to `getMatches()`.
+- `getCode()` in `TextAnalyticsException` and `TextAnalyticsError` has been renamed to `getErrorCode()`.
+- `getCode()` in `TextAnalyticsWarning` has been renamed to `getWarningCode()`.
+- Async client returns errors, mono error or flux error but no longer throws exception. Sync client throws exceptions only.
+- Deprecated `TextDocumentInput(String id, String text, String language)` constructor, but added `setLanguage()` setter since `language` is optional.
+- Renamed `RecognizeCategorizedEntitiesResult` to `RecognizeEntitiesResult`.
+- Renamed `DocumentResult` to `TextAnalyticsResult`.
+- Removed `getServiceVersion()` from both synchronous and asynchronous clients.
+- Replaced all single input asynchronous APIs, e.x., 
+  - `TextAnalyticsPagedFlux<CategorizedEntity> recognizeEntities(String document)` to `Mono<CategorizedEntityCollection> recognizeEntities(String document)`.
+  - `TextAnalyticsPagedFlux<LinkedEntity> recognizeLinkedEntities(String document)` to `Mono<LinkedEntityCollection> recognizeLinkedEntities(String document)`.
+  - `TextAnalyticsPagedFlux<String> extractKeyPhrases(String document)` to `Mono<KeyPhrasesCollection> extractKeyPhrases(String document)`.
+- Replaced all single input synchronous APIs, e.x., 
+  - `TextAnalyticsPagedIterable<CategorizedEntity> recognizeEntities(String document)` to `CategorizedEntityCollection recognizeEntities(String document)`.
+  - `TextAnalyticsPagedIterable<LinkedEntity> recognizeLinkedEntities(String document)` to `LinkedEntityCollection recognizeLinkedEntities(String document)`.
+  - `TextAnalyticsPagedIterable<String> extractKeyPhrases(String document)` to `KeyPhrasesCollection extractKeyPhrases(String document)`.
+  
+## 1.0.0-beta.4 (2020-04-07)
+- Throws an illegal argument exception when the given list of documents is an empty list.
+
+**Breaking changes**
+- Renamed all input parameters `text` to `document`, and `inputTexts` to `documents`.
+- Removed all PII endpoints and update with related changes, such as remove related models, samples, codesnippets, docstrings, etc from this library. 
+- Replaced `TextAnalyticsApiKeyCredential` with `AzureKeyCredential`.
+
+## 1.0.0-beta.3 (2020-03-10)
+**New features**
+- Introduced `TextAnalyticsPagedFlux`, `TextAnalyticsPagedIterable`, and `TextAnalyticsPagedResponse` type. Moved `modelVersion` amd `TextDocumentBatchStatistics` into `TextAnalyticsPagedResponse`. All collection APIs are return `TextAnalyticsPagedFlux` and `TextAnalyticsPagedIterable` in the asynchronous and synchronous client, respectively. So `DocumentResultCollection` is no longer required. Most of existing API surface are changes. Please check up `TextAnalyticsAsyncClient` and `TextAnalyticsClient` for more detail.
+- Introduced `EntityCategory` class to support major entity categories that the service supported.
+- Added `getDefaultCountryHint()`, `getDefaultLanguage()` and `getServiceVersion()` to `TextAnalyticsClient`
+
+**Breaking changes**
+- Supported `Iterable<T>` instead of `List<T>` text inputs.
+- Default language and country hint can only be assigned value when building a Text Analytics client.
+- Renamed `showStatistics()` to `isIncludeStatistics()` in the `TextAnalyticsRequestOptions`.
+- Renamed `getErrorCodeValue()` to `getCode()` in the `TextAnalyticsException`.
+- Renamed `getOffset()`, `getLength()` and `getScore()` to `getGraphemeOffset()`, `getGraphemeLength` and `getConfidenceScore()`in `CategorizedEntity`, `LinkedEntityMatch`, `PiiEntity`.
+- Renamed `SentimentLabel` to `TextSentiment` class.
+- Renamed `SentimentScorePerLabel` to `SentimentConfidenceScores` class.
+- Renamed `getCharacterCount()` to `getGraphemeCount()` in the `TextDocumentStatistics`.
+- Removed `InnerError`, `DocumentResultCollection` and `TextAnalyticsClientOptions` class.
 
 ## 1.0.0-beta.2 (2020-02-12)
 

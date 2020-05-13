@@ -5,14 +5,15 @@ package com.azure.cosmos.rx;
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
-import com.azure.cosmos.CosmosAsyncItemResponse;
+import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.models.CosmosAsyncItemResponse;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.CosmosClientException;
-import com.azure.cosmos.CosmosItemRequestOptions;
-import com.azure.cosmos.PartitionKey;
+import com.azure.cosmos.models.CosmosItemRequestOptions;
+import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.implementation.CosmosItemProperties;
 import com.azure.cosmos.implementation.FailureValidator;
-import io.reactivex.subscribers.TestSubscriber;
 import org.apache.commons.lang3.StringUtils;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -26,7 +27,6 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.io.FileUtils.ONE_MB;
@@ -57,7 +57,7 @@ public class DocumentCrudTest extends TestSuiteBase {
 
         CosmosItemProperties properties = getDocumentDefinition(documentId);
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> createObservable = container.createItem(properties, new CosmosItemRequestOptions());
-        
+
         CosmosItemResponseValidator validator =
             new CosmosItemResponseValidator.Builder<CosmosAsyncItemResponse<CosmosItemProperties>>()
             .withId(properties.getId())
@@ -65,9 +65,7 @@ public class DocumentCrudTest extends TestSuiteBase {
 
         this.validateItemSuccess(createObservable, validator);
     }
-    
-    // TODO (DANOBLE) DocumentCrudTest::createLargeDocument fails in some  environments
-    //  see https://github.com/Azure/azure-sdk-for-java/issues/6335
+
     @Test(groups = { "simple" }, timeOut = TIMEOUT, dataProvider = "documentCrudArgProvider")
     public void createLargeDocument(String documentId) throws InterruptedException {
         CosmosItemProperties docDefinition = getDocumentDefinition(documentId);
@@ -102,12 +100,10 @@ public class DocumentCrudTest extends TestSuiteBase {
                 .withId(docDefinition.getId())
                 .withProperty("mypk", sb.toString())
                 .build();
-        
+
         this.validateItemSuccess(createObservable, validator);
     }
 
-    // TODO (DANOBLE) DocumentCrudTest::readDocumentWithVeryLargePartitionKey test fails in some environments
-    //  see https://github.com/Azure/azure-sdk-for-java/issues/6336
     @Test(groups = { "simple" }, timeOut = TIMEOUT, dataProvider = "documentCrudArgProvider")
     public void readDocumentWithVeryLargePartitionKey(String documentId) throws InterruptedException {
         CosmosItemProperties docDefinition = getDocumentDefinition(documentId);
@@ -119,7 +115,7 @@ public class DocumentCrudTest extends TestSuiteBase {
 
         createDocument(container, docDefinition);
 
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> readObservable = container.readItem(docDefinition.getId(),
@@ -139,7 +135,10 @@ public class DocumentCrudTest extends TestSuiteBase {
         CosmosItemProperties docDefinition = getDocumentDefinition(documentId);
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> createObservable = container.createItem(docDefinition, new CosmosItemRequestOptions());
-        FailureValidator validator = new FailureValidator.Builder().resourceAlreadyExists().build();
+        FailureValidator validator = new FailureValidator.Builder()
+            .resourceAlreadyExists()
+            .documentClientExceptionToStringExcludesHeader(HttpConstants.HttpHeaders.AUTHORIZATION)
+            .build();
         validateItemFailure(createObservable, validator);
     }
 
@@ -157,11 +156,11 @@ public class DocumentCrudTest extends TestSuiteBase {
         CosmosItemProperties docDefinition = getDocumentDefinition(documentId);
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
 
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> readObservable = container.readItem(docDefinition.getId(),
-                                                                          new PartitionKey(docDefinition.get("mypk")), 
+                                                                          new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                                                           options, CosmosItemProperties.class);
 
         CosmosItemResponseValidator validator =
@@ -179,11 +178,11 @@ public class DocumentCrudTest extends TestSuiteBase {
         Thread.sleep(1000);
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
 
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
         CosmosItemProperties readDocument = BridgeInternal.getProperties(container.readItem(docDefinition.getId(),
-                                                               new PartitionKey(docDefinition.get("mypk")),
+                                                               new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                                                options,
                                                                CosmosItemProperties.class)
                                                 .block());
@@ -201,21 +200,22 @@ public class DocumentCrudTest extends TestSuiteBase {
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
-        container.deleteItem(docDefinition.getId(), new PartitionKey(docDefinition.get("mypk"))).block();
+        container.deleteItem(docDefinition.getId(), new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk"))).block();
 
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> readObservable = container.readItem(docDefinition.getId(),
-                                                                          new PartitionKey(docDefinition.get("mypk")),
+                                                                          new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                                                           options, CosmosItemProperties.class);
 
-        FailureValidator validator = new FailureValidator.Builder().instanceOf(CosmosClientException.class)
-                .statusCode(404).build();
+        FailureValidator validator = new FailureValidator.Builder()
+            .instanceOf(CosmosClientException.class)
+            .statusCode(404)
+            .documentClientExceptionToStringExcludesHeader(HttpConstants.HttpHeaders.AUTHORIZATION)
+            .build();
         validateItemFailure(readObservable, validator);
     }
 
-    // TODO (DANOBLE) DocumentCrudTest::deleteDocument test fails in some test environments
-    //  see https://github.com/Azure/azure-sdk-for-java/issues/6337
     @Test(groups = { "simple" }, timeOut = TIMEOUT, dataProvider = "documentCrudArgProvider")
     public void deleteDocument(String documentId) throws InterruptedException {
         CosmosItemProperties docDefinition = getDocumentDefinition(documentId);
@@ -223,10 +223,10 @@ public class DocumentCrudTest extends TestSuiteBase {
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
-        Mono<CosmosAsyncItemResponse> deleteObservable = container.deleteItem(documentId,
-                                                                          new PartitionKey(docDefinition.get("mypk")), 
+        Mono<CosmosAsyncItemResponse<Object>> deleteObservable = container.deleteItem(documentId,
+                                                                          new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                                                           options);
-        
+
         CosmosItemResponseValidator validator =
             new CosmosItemResponseValidator.Builder<CosmosAsyncItemResponse<CosmosItemProperties>>()
                 .nullResource()
@@ -234,12 +234,15 @@ public class DocumentCrudTest extends TestSuiteBase {
         this.validateItemSuccess(deleteObservable, validator);
 
         // attempt to read document which was deleted
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> readObservable = container.readItem(documentId,
-                                                                          new PartitionKey(docDefinition.get("mypk")), 
+                                                                          new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                                                           options, CosmosItemProperties.class);
-        FailureValidator notFoundValidator = new FailureValidator.Builder().resourceNotFound().build();
+        FailureValidator notFoundValidator = new FailureValidator.Builder()
+            .resourceNotFound()
+            .documentClientExceptionToStringExcludesHeader(HttpConstants.HttpHeaders.AUTHORIZATION)
+            .build();
         validateItemFailure(readObservable, notFoundValidator);
     }
 
@@ -251,7 +254,7 @@ public class DocumentCrudTest extends TestSuiteBase {
         container.createItem(docDefinition, new CosmosItemRequestOptions()).block();
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
-        Mono<CosmosAsyncItemResponse> deleteObservable = container.deleteItem(documentId,
+        Mono<CosmosAsyncItemResponse<Object>> deleteObservable = container.deleteItem(documentId,
                                                                               PartitionKey.NONE,
                                                                               options);
 
@@ -261,7 +264,7 @@ public class DocumentCrudTest extends TestSuiteBase {
         this.validateItemSuccess(deleteObservable, validator);
 
         // attempt to read document which was deleted
-        waitIfNeededForReplicasToCatchUp(clientBuilder());
+        waitIfNeededForReplicasToCatchUp(getClientBuilder());
 
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> readObservable = container.readItem(documentId,
                                                                           PartitionKey.NONE,
@@ -278,12 +281,12 @@ public class DocumentCrudTest extends TestSuiteBase {
 
         CosmosItemRequestOptions options = new CosmosItemRequestOptions();
         container.deleteItem(documentId,
-                             new PartitionKey(docDefinition.get("mypk")),
+                             new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                              options)
             .block();
 
         // delete again
-        Mono<CosmosAsyncItemResponse> deleteObservable = container.deleteItem(documentId,
+        Mono<CosmosAsyncItemResponse<Object>> deleteObservable = container.deleteItem(documentId,
                                                                               PartitionKey.NONE,
                                                                               options);;
 
@@ -306,7 +309,7 @@ public class DocumentCrudTest extends TestSuiteBase {
         Mono<CosmosAsyncItemResponse<CosmosItemProperties>> replaceObservable =
             container.replaceItem(docDefinition,
                                   documentId,
-                                  new PartitionKey(docDefinition.get("mypk")),
+                                  new PartitionKey(ModelBridgeInternal.getObjectFromJsonSerializable(docDefinition, "mypk")),
                                   options);
 
         // validate
@@ -332,7 +335,7 @@ public class DocumentCrudTest extends TestSuiteBase {
             new CosmosItemResponseValidator.Builder<CosmosAsyncItemResponse<CosmosItemProperties>>()
             .withId(docDefinition.getId())
             .build();
-        
+
         this.validateItemSuccess(upsertObservable, validator);
     }
 
@@ -378,14 +381,14 @@ public class DocumentCrudTest extends TestSuiteBase {
         TestObject newTestObject = new TestObject(docId, partitionKey, sgmts, "test string");
 
         Mono<CosmosAsyncItemResponse<TestObject>> itemResponseMono = container.createItem(newTestObject);
-        TestObject resultObject = itemResponseMono.block().getResource();
+        TestObject resultObject = itemResponseMono.block().getItem();
         compareTestObjs(newTestObject, resultObject);
 
         Mono<CosmosAsyncItemResponse<TestObject>> readResponseMono = container.readItem(newTestObject.id,
                                                                                         new PartitionKey(newTestObject
                                                                                                              .getMypk()),
                                                                                         TestObject.class);
-        resultObject = readResponseMono.block().getResource();
+        resultObject = readResponseMono.block().getItem();
         compareTestObjs(newTestObject, resultObject);
 
         newTestObject.setStringProp("another string");
@@ -393,7 +396,7 @@ public class DocumentCrudTest extends TestSuiteBase {
                                                                                       newTestObject.getId(),
                                                                                       new PartitionKey(newTestObject
                                                                                                            .getMypk()));
-        resultObject = replaceMono.block().getResource();
+        resultObject = replaceMono.block().getItem();
         compareTestObjs(newTestObject, resultObject);
     }
 
@@ -407,7 +410,7 @@ public class DocumentCrudTest extends TestSuiteBase {
     static class TestObject {
         private String id;
         private String mypk;
-        private List<List<Integer>> sgmts; 
+        private List<List<Integer>> sgmts;
         private String stringProp;
 
         public TestObject() {
@@ -462,12 +465,12 @@ public class DocumentCrudTest extends TestSuiteBase {
             this.stringProp = stringProp;
         }
     }
-    
+
 
     @BeforeClass(groups = { "simple" }, timeOut = SETUP_TIMEOUT)
     public void before_DocumentCrudTest() {
         assertThat(this.client).isNull();
-        this.client = this.clientBuilder().buildAsyncClient();
+        this.client = this.getClientBuilder().buildAsyncClient();
         this.container = getSharedMultiPartitionCosmosContainer(this.client);
     }
 

@@ -4,20 +4,22 @@ package com.azure.cosmos.rx.examples;
 
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.ConnectionMode;
-import com.azure.cosmos.ConnectionPolicy;
+import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.implementation.ConnectionPolicy;
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosClientException;
 import com.azure.cosmos.DocumentClientTest;
-import com.azure.cosmos.FeedOptions;
-import com.azure.cosmos.FeedResponse;
-import com.azure.cosmos.PartitionKey;
-import com.azure.cosmos.PartitionKeyDefinition;
+import com.azure.cosmos.models.FeedOptions;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.PartitionKeyDefinition;
 import com.azure.cosmos.implementation.AsyncDocumentClient;
 import com.azure.cosmos.implementation.Database;
 import com.azure.cosmos.implementation.Document;
 import com.azure.cosmos.implementation.DocumentCollection;
 import com.azure.cosmos.implementation.RequestOptions;
 import com.azure.cosmos.implementation.ResourceResponse;
+import com.azure.cosmos.implementation.TestConfigurations;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -34,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
@@ -81,13 +84,14 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
     @BeforeClass(groups = "samples", timeOut = TIMEOUT)
     public void before_DocumentCRUDAsyncAPITest() {
 
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy().setConnectionMode(ConnectionMode.DIRECT);
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(DirectConnectionConfig.getDefaultConfig());
 
         this.clientBuilder()
             .withServiceEndpoint(TestConfigurations.HOST)
             .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
             .withConnectionPolicy(connectionPolicy)
-            .withConsistencyLevel(ConsistencyLevel.SESSION);
+            .withConsistencyLevel(ConsistencyLevel.SESSION)
+            .withContentResponseOnWriteEnabled(true);
 
         this.client = this.clientBuilder().build();
 
@@ -320,7 +324,8 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
             System.err.println("failed to create a document due to: " + error.getMessage());
         });
 
-        Thread.sleep(2000);
+        waitForConditionOrTimeout(() -> errorList.size() == 1);
+
         assertThat(errorList, hasSize(1));
         assertThat(errorList.get(0), is(instanceOf(CosmosClientException.class)));
         assertThat(((CosmosClientException) errorList.get(0)).getStatusCode(), equalTo(409));
@@ -349,7 +354,7 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
             capturedResponse.add(resourceResponse);
         });
 
-        Thread.sleep(2000);
+        waitForConditionOrTimeout(() -> capturedResponse.size() == 1);
 
         assertThat(capturedResponse, hasSize(1));
         assertThat(capturedResponse.get(0).getResource().get("new-prop"), equalTo("2"));
@@ -377,7 +382,7 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
             capturedResponse.add(resourceResponse);
         });
 
-        Thread.sleep(4000);
+        waitForConditionOrTimeout(() -> capturedResponse.size() == 1);
 
         assertThat(capturedResponse, hasSize(1));
         assertThat(capturedResponse.get(0).getResource().get("new-prop"), equalTo("2"));
@@ -407,7 +412,7 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
             capturedResponse.add(resourceResponse);
         });
 
-        Thread.sleep(2000);
+        waitForConditionOrTimeout(() -> capturedResponse.size() == 1);
 
         assertThat(capturedResponse, hasSize(1));
 
@@ -448,7 +453,7 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
             capturedResponse.add(resourceResponse);
         });
 
-        Thread.sleep(2000);
+        waitForConditionOrTimeout(() -> capturedResponse.size() == 1);
 
         // Assert document is retrieved
         assertThat(capturedResponse, hasSize(1));
@@ -519,5 +524,15 @@ public class DocumentCRUDAsyncAPITest extends DocumentClientTest {
 
     private String getDocumentLink(Document createdDocument) {
         return "dbs/" + createdDatabase.getId() + "/colls/" + createdCollection.getId() + "/docs/" + createdDocument.getId();
+    }
+
+    private void waitForConditionOrTimeout(Callable<Boolean> completionCondition) throws Exception {
+        long start = System.currentTimeMillis();
+        while(!completionCondition.call()) {
+            Thread.sleep(1000);
+            if ((System.currentTimeMillis() - start) > TIMEOUT) {
+                break;
+            }
+        }
     }
 }

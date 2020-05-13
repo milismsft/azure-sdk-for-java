@@ -4,37 +4,35 @@
 package com.azure.ai.textanalytics.models;
 
 import com.azure.core.annotation.Immutable;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.azure.core.util.IterableStream;
 
 /**
- * The RecognizeLinkedEntitiesResult model.
+ * The {@link RecognizeLinkedEntitiesResult} model.
  */
 @Immutable
-public final class RecognizeLinkedEntitiesResult extends DocumentResult {
-    private final List<LinkedEntity> entities;
+public final class RecognizeLinkedEntitiesResult extends TextAnalyticsResult {
+    private final LinkedEntityCollection entities;
 
     /**
-     * Creates a {@code RecognizeLinkedEntitiesResult} model that describes recognized linked entities result.
+     * Creates a {@link RecognizeLinkedEntitiesResult} model that describes recognized linked entities result.
      *
-     * @param id unique, non-empty document identifier
-     * @param textDocumentStatistics text document statistics
-     * @param error the document error
-     * @param entities a list of linked entities
+     * @param id Unique, non-empty document identifier.
+     * @param textDocumentStatistics The text document statistics.
+     * @param error The document error.
+     * @param entities A {@link LinkedEntityCollection} contains entities and warnings.
      */
     public RecognizeLinkedEntitiesResult(String id, TextDocumentStatistics textDocumentStatistics,
-        TextAnalyticsError error, List<LinkedEntity> entities) {
+                                         TextAnalyticsError error, LinkedEntityCollection entities) {
         super(id, textDocumentStatistics, error);
-        this.entities = entities == null ? new ArrayList<>() : entities;
+        this.entities = entities;
     }
 
     /**
-     * Get a list of linked entities.
+     * Get an {@link IterableStream} of {@link LinkedEntity}.
      *
-     * @return a list of linked entities.
+     * @return An {@link IterableStream} of {@link LinkedEntity}.
      */
-    public List<LinkedEntity> getEntities() {
+    public LinkedEntityCollection getEntities() {
         throwExceptionIfError();
         return entities;
     }

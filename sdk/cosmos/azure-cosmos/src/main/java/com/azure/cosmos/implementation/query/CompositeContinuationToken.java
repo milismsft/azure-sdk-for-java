@@ -5,7 +5,7 @@ package com.azure.cosmos.implementation.query;
 
 import com.azure.cosmos.implementation.routing.Range;
 import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.JsonSerializable;
+import com.azure.cosmos.implementation.JsonSerializable;
 import com.azure.cosmos.implementation.Utils.ValueHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,8 +57,8 @@ public final class CompositeContinuationToken extends JsonSerializable {
             parsed = true;
         } catch (Exception ex) {
             logger.debug(
-                    "Received exception {} when trying to parse: {}", 
-                    ex.getMessage(), 
+                    "Received exception {} when trying to parse: {}",
+                    ex.getMessage(),
                     serializedCompositeContinuationToken);
             parsed = false;
             outCompositeContinuationToken.v = null;
@@ -96,5 +96,10 @@ public final class CompositeContinuationToken extends JsonSerializable {
     private void setRange(Range<String> range) {
         /* TODO: Don't stringify the range */
         BridgeInternal.setProperty(this, RangePropertyName, range.toString());
+    }
+
+    @Override
+    public String toJson() {
+        return super.toJson();
     }
 }

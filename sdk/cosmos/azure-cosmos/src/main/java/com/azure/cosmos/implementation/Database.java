@@ -3,8 +3,8 @@
 
 package com.azure.cosmos.implementation;
 
-import com.azure.cosmos.Resource;
-import org.apache.commons.lang3.StringUtils;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Represents a Database in the Azure Cosmos DB database service. A database manages users, permissions and a set of collections
@@ -15,6 +15,16 @@ import org.apache.commons.lang3.StringUtils;
  * order to access and successfully complete any action using the User APIs.
  */
 public final class Database extends Resource {
+
+    /**
+     * Constructor.
+     *
+     * @param objectNode the {@link ObjectNode} that represent the
+     * {@link JsonSerializable}
+     */
+    public Database(ObjectNode objectNode) {
+        super(objectNode);
+    }
 
     /**
      * Initialize a database object.

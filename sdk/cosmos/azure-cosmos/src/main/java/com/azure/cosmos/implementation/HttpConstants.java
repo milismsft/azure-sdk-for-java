@@ -3,6 +3,8 @@
 
 package com.azure.cosmos.implementation;
 
+import com.azure.core.util.CoreUtils;
+
 /**
  * Used internally. HTTP constants in the Azure Cosmos DB database service Java
  * SDK.
@@ -169,6 +171,9 @@ public class HttpConstants {
         public static final String OFFER_TYPE = "x-ms-offer-type";
         public static final String OFFER_THROUGHPUT = "x-ms-offer-throughput";
         public static final String OFFER_IS_RU_PER_MINUTE_THROUGHPUT_ENABLED = "x-ms-offer-is-ru-per-minute-throughput-enabled";
+        public static final String OFFER_MIN_THROUGHPUT = "x-ms-cosmos-min-throughput";
+        public static final String OFFER_AUTOPILOT_SETTINGS = "x-ms-cosmos-offer-autopilot-settings";
+        public static final String OFFER_REPLACE_PENDING = "x-ms-offer-replace-pending";
 
         // Upsert header
         public static final String IS_UPSERT = "x-ms-documentdb-is-upsert";
@@ -253,11 +258,9 @@ public class HttpConstants {
     public static class Versions {
         public static final String CURRENT_VERSION = "2018-12-31";
         public static final String QUERY_VERSION = "1.0";
+        public static final String AZURE_COSMOS_PROPERTIES_FILE_NAME = "azure-cosmos.properties";
 
-        // TODO: FIXME we can use maven plugin for generating a version file
-        // @see
-        // https://stackoverflow.com/questions/2469922/generate-a-version-java-file-in-maven
-        public static final String SDK_VERSION = "4.0.0-preview.2";
+        public static final String SDK_VERSION = CoreUtils.getProperties(AZURE_COSMOS_PROPERTIES_FILE_NAME).get("version");
         public static final String SDK_NAME = "cosmosdb-java-sdk";
     }
 
@@ -306,6 +309,7 @@ public class HttpConstants {
     }
 
     public static class HeaderValues {
-        public static final String NoCache = "no-cache";
+        public static final String NO_CACHE = "no-cache";
+        public static final String PREFER_RETURN_MINIMAL = "return=minimal";
     }
 }

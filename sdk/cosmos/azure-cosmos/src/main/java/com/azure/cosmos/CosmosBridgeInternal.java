@@ -4,16 +4,15 @@
 package com.azure.cosmos;
 
 import com.azure.cosmos.implementation.AsyncDocumentClient;
-import com.azure.cosmos.implementation.DocumentCollection;
-import reactor.core.publisher.Mono;
+import com.azure.cosmos.implementation.ConnectionPolicy;
 
 /**
  * DO NOT USE. For internal use only by the SDK. These methods might break at any time. No support will be provided.
  */
-public class CosmosBridgeInternal {
+public final class CosmosBridgeInternal {
 
-    public static DocumentCollection toDocumentCollection(CosmosContainerProperties cosmosContainerProperties) {
-        return new DocumentCollection(cosmosContainerProperties.toJson());
+    public static AsyncDocumentClient getAsyncDocumentClient(CosmosClient client) {
+        return client.asyncClient().getDocClientWrapper();
     }
 
     public static AsyncDocumentClient getAsyncDocumentClient(CosmosAsyncClient client) {
@@ -36,15 +35,46 @@ public class CosmosBridgeInternal {
             CosmosBridgeInternal.getCosmosDatabaseWithNewClient(cosmosDatabase, client));
     }
 
-    public static Mono<DatabaseAccount> getDatabaseAccount(CosmosAsyncClient client) {
-        return client.readDatabaseAccount();
-    }
-
     public static AsyncDocumentClient getContextClient(CosmosAsyncDatabase database) {
         return database.getClient().getContextClient();
     }
 
     public static AsyncDocumentClient getContextClient(CosmosAsyncContainer container) {
         return container.getDatabase().getClient().getContextClient();
+    }
+
+    public static CosmosAsyncContainer getCosmosAsyncContainer(CosmosContainer container) {
+        return container.asyncContainer;
+    }
+
+    public static ConsistencyLevel getConsistencyLevel(CosmosClientBuilder cosmosClientBuilder) {
+        return cosmosClientBuilder.getConsistencyLevel();
+    }
+
+    public static ConnectionPolicy getConnectionPolicy(CosmosClientBuilder cosmosClientBuilder) {
+        return cosmosClientBuilder.getConnectionPolicy();
+    }
+
+    public static CosmosClientBuilder cloneCosmosClientBuilder(CosmosClientBuilder builder) {
+        CosmosClientBuilder copy = new CosmosClientBuilder();
+
+        copy.endpoint(builder.getEndpoint())
+            .key(builder.getKey())
+            .directMode(builder.getDirectConnectionConfig())
+            .gatewayMode(builder.getGatewayConnectionConfig())
+            .consistencyLevel(builder.getConsistencyLevel())
+            .keyCredential(builder.getKeyCredential())
+            .permissions(builder.getPermissions())
+            .authorizationTokenResolver(builder.getAuthorizationTokenResolver())
+            .resourceToken(builder.getResourceToken())
+            .contentResponseOnWriteEnabled(builder.isContentResponseOnWriteEnabled())
+            .userAgentSuffix(builder.getUserAgentSuffix())
+            .throttlingRetryOptions(builder.getThrottlingRetryOptions())
+            .preferredRegions(builder.getPreferredRegions())
+            .endpointDiscoveryEnabled(builder.isEndpointDiscoveryEnabled())
+            .multipleWriteRegionsEnabled(builder.isMultipleWriteRegionsEnabled())
+            .readRequestsFallbackEnabled(builder.isReadRequestsFallbackEnabled());
+
+        return copy;
     }
 }

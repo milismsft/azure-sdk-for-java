@@ -66,7 +66,6 @@ import static com.azure.messaging.eventhubs.implementation.ClientConstants.MAX_M
  * <li>The sending of events needs to be highly available.</li>
  * <li>The event data should be evenly distributed among all available partitions.</li>
  * </ul>
- * </p>
  *
  * <p>
  * If no partition id is specified, the following rules are used for automatically selecting one:
@@ -75,7 +74,6 @@ import static com.azure.messaging.eventhubs.implementation.ClientConstants.MAX_M
  * <li>If a partition becomes unavailable, the Event Hubs service will automatically detect it and forward the
  * message to another available partition.</li>
  * </ol>
- * </p>
  *
  * <p><strong>Create a producer and publish events to any partition</strong></p>
  * {@codesnippet com.azure.messaging.eventhubs.eventhubasyncproducerclient.createBatch}
@@ -111,6 +109,7 @@ public class EventHubProducerAsyncClient implements Closeable {
     private final MessageSerializer messageSerializer;
     private final Scheduler scheduler;
     private final boolean isSharedConnection;
+    private final Runnable onClientClose;
 
     /**
      * Creates a new instance of this {@link EventHubProducerAsyncClient} that can send messages to a single partition
@@ -119,7 +118,7 @@ public class EventHubProducerAsyncClient implements Closeable {
      */
     EventHubProducerAsyncClient(String fullyQualifiedNamespace, String eventHubName,
         EventHubConnectionProcessor connectionProcessor, AmqpRetryOptions retryOptions, TracerProvider tracerProvider,
-        MessageSerializer messageSerializer, Scheduler scheduler, boolean isSharedConnection) {
+        MessageSerializer messageSerializer, Scheduler scheduler, boolean isSharedConnection, Runnable onClientClose) {
         this.fullyQualifiedNamespace = Objects.requireNonNull(fullyQualifiedNamespace,
             "'fullyQualifiedNamespace' cannot be null.");
         this.eventHubName = Objects.requireNonNull(eventHubName, "'eventHubName' cannot be null.");
@@ -128,6 +127,7 @@ public class EventHubProducerAsyncClient implements Closeable {
         this.retryOptions = Objects.requireNonNull(retryOptions, "'retryOptions' cannot be null.");
         this.tracerProvider = Objects.requireNonNull(tracerProvider, "'tracerProvider' cannot be null.");
         this.messageSerializer = Objects.requireNonNull(messageSerializer, "'messageSerializer' cannot be null.");
+        this.onClientClose = Objects.requireNonNull(onClientClose, "'onClientClose' cannot be null.");
 
         this.retryPolicy = getRetryPolicy(retryOptions);
         this.scheduler = scheduler;
@@ -244,7 +244,7 @@ public class EventHubProducerAsyncClient implements Closeable {
                         : maximumLinkSize;
 
                     return Mono.just(new EventDataBatch(batchSize, partitionId, partitionKey, link::getErrorContext,
-                        tracerProvider));
+                        tracerProvider, link.getEntityPath(), link.getHostname()));
                 }));
     }
 
@@ -298,10 +298,19 @@ public class EventHubProducerAsyncClient implements Closeable {
      * maximum size of a single batch, an exception will be triggered and the send will fail. By default, the message
      * size is the max amount allowed on the link.
      *
+     * {@codesnippet com.azure.messaging.eventhubs.eventhubasyncproducerclient.send#Iterable}
+     *
+     * <p>
+     * For more information regarding the maximum event size allowed, see
+     * <a href="https://docs.microsoft.com/azure/event-hubs/event-hubs-quotas">Azure Event Hubs Quotas and
+     * Limits</a>.
+     * </p>
+     *
      * @param events Events to send to the service.
      * @return A {@link Mono} that completes when all events are pushed to the service.
+     * @throws AmqpException if the size of {@code events} exceed the maximum size of a single batch.
      */
-    Mono<Void> send(Iterable<EventData> events) {
+    public Mono<Void> send(Iterable<EventData> events) {
         if (events == null) {
             return monoError(logger, new NullPointerException("'events' cannot be null."));
         }
@@ -314,11 +323,20 @@ public class EventHubProducerAsyncClient implements Closeable {
      * maximum size of a single batch, an exception will be triggered and the send will fail. By default, the message
      * size is the max amount allowed on the link.
      *
+     * {@codesnippet com.azure.messaging.eventhubs.eventhubasyncproducerclient.send#Iterable-SendOptions}
+     *
+     * <p>
+     * For more information regarding the maximum event size allowed, see
+     * <a href="https://docs.microsoft.com/azure/event-hubs/event-hubs-quotas">Azure Event Hubs Quotas and
+     * Limits</a>.
+     * </p>
+     *
      * @param events Events to send to the service.
      * @param options The set of options to consider when sending this batch.
      * @return A {@link Mono} that completes when all events are pushed to the service.
+     * @throws AmqpException if the size of {@code events} exceed the maximum size of a single batch.
      */
-    Mono<Void> send(Iterable<EventData> events, SendOptions options) {
+    public Mono<Void> send(Iterable<EventData> events, SendOptions options) {
         if (events == null) {
             return monoError(logger, new NullPointerException("'events' cannot be null."));
         } else if (options == null) {
@@ -464,7 +482,7 @@ public class EventHubProducerAsyncClient implements Closeable {
                         .setPartitionId(options.getPartitionId())
                         .setMaximumSizeInBytes(batchSize);
                     return events.collect(new EventDataCollector(batchOptions, 1, link::getErrorContext,
-                        tracerProvider));
+                        tracerProvider, link.getEntityPath(), link.getHostname()));
                 })
                 .flatMap(list -> sendInternal(Flux.fromIterable(list))));
     }
@@ -502,7 +520,9 @@ public class EventHubProducerAsyncClient implements Closeable {
             return;
         }
 
-        if (!isSharedConnection) {
+        if (isSharedConnection) {
+            onClientClose.run();
+        } else {
             connectionProcessor.dispose();
         }
     }
@@ -521,11 +541,13 @@ public class EventHubProducerAsyncClient implements Closeable {
         private final Integer maxNumberOfBatches;
         private final ErrorContextProvider contextProvider;
         private final TracerProvider tracerProvider;
+        private final String entityPath;
+        private final String hostname;
 
         private volatile EventDataBatch currentBatch;
 
         EventDataCollector(CreateBatchOptions options, Integer maxNumberOfBatches, ErrorContextProvider contextProvider,
-            TracerProvider tracerProvider) {
+            TracerProvider tracerProvider, String entityPath, String hostname) {
             this.maxNumberOfBatches = maxNumberOfBatches;
             this.maxMessageSize = options.getMaximumSizeInBytes() > 0
                 ? options.getMaximumSizeInBytes()
@@ -534,9 +556,11 @@ public class EventHubProducerAsyncClient implements Closeable {
             this.partitionId = options.getPartitionId();
             this.contextProvider = contextProvider;
             this.tracerProvider = tracerProvider;
+            this.entityPath = entityPath;
+            this.hostname = hostname;
 
             currentBatch = new EventDataBatch(maxMessageSize, partitionId, partitionKey, contextProvider,
-                tracerProvider);
+                tracerProvider, entityPath, hostname);
         }
 
         @Override
@@ -561,7 +585,7 @@ public class EventHubProducerAsyncClient implements Closeable {
                 }
 
                 currentBatch = new EventDataBatch(maxMessageSize, partitionId, partitionKey, contextProvider,
-                    tracerProvider);
+                    tracerProvider, entityPath, hostname);
                 currentBatch.tryAdd(event);
                 list.add(batch);
             };

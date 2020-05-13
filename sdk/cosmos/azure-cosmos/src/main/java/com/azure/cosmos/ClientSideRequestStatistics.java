@@ -3,12 +3,15 @@
 package com.azure.cosmos;
 
 import com.azure.cosmos.implementation.HttpConstants;
+import com.azure.cosmos.implementation.MetadataDiagnosticsContext;
 import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RetryContext;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
+import com.azure.cosmos.implementation.SerializationDiagnosticsContext;
 import com.azure.cosmos.implementation.Utils;
+import com.azure.cosmos.implementation.ZonedDateTimeSerializer;
 import com.azure.cosmos.implementation.directconnectivity.DirectBridgeInternal;
 import com.azure.cosmos.implementation.directconnectivity.StoreResponse;
 import com.azure.cosmos.implementation.directconnectivity.StoreResult;
@@ -17,7 +20,7 @@ import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.sun.management.OperatingSystemMXBean;
-import org.apache.commons.lang3.StringUtils;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
@@ -28,11 +31,13 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 @JsonSerialize(using = ClientSideRequestStatistics.ClientSideRequestStatisticsSerializer.class)
@@ -49,31 +54,35 @@ class ClientSideRequestStatistics {
 
     private List<URI> contactedReplicas;
     private Set<URI> failedReplicas;
-    private ZonedDateTime requestStartTime;
-    private ZonedDateTime requestEndTime;
+    private ZonedDateTime requestStartTimeUTC;
+    private ZonedDateTime requestEndTimeUTC;
     private Set<URI> regionsContacted;
     private RetryContext retryContext;
     private GatewayStatistics gatewayStatistics;
     private RequestTimeline transportRequestTimeline;
+    private MetadataDiagnosticsContext metadataDiagnosticsContext;
+    private SerializationDiagnosticsContext serializationDiagnosticsContext;
 
     ClientSideRequestStatistics() {
-        this.requestStartTime = ZonedDateTime.now(ZoneOffset.UTC);
-        this.requestEndTime = ZonedDateTime.now(ZoneOffset.UTC);
+        this.requestStartTimeUTC = ZonedDateTime.now(ZoneOffset.UTC);
+        this.requestEndTimeUTC = ZonedDateTime.now(ZoneOffset.UTC);
         this.responseStatisticsList = new ArrayList<>();
         this.supplementalResponseStatisticsList = new ArrayList<>();
         this.addressResolutionStatistics = new HashMap<>();
-        this.contactedReplicas = new ArrayList<>();
-        this.failedReplicas = new HashSet<>();
-        this.regionsContacted = new HashSet<>();
+        this.contactedReplicas = Collections.synchronizedList(new ArrayList<>());
+        this.failedReplicas = Collections.synchronizedSet(new HashSet<>());
+        this.regionsContacted = Collections.synchronizedSet(new HashSet<>());
         this.connectionMode = ConnectionMode.DIRECT;
-        this.retryContext = retryContext;
+        this.metadataDiagnosticsContext = new MetadataDiagnosticsContext();
+        this.serializationDiagnosticsContext = new SerializationDiagnosticsContext();
     }
 
     Duration getRequestLatency() {
-        return Duration.between(requestStartTime, requestEndTime);
+        return Duration.between(requestStartTimeUTC, requestEndTimeUTC);
     }
 
     void recordResponse(RxDocumentServiceRequest request, StoreResult storeResult) {
+        Objects.requireNonNull(request, "request is required and cannot be null.");
         ZonedDateTime responseTime = ZonedDateTime.now(ZoneOffset.UTC);
         connectionMode = ConnectionMode.DIRECT;
 
@@ -84,7 +93,7 @@ class ClientSideRequestStatistics {
         storeResponseStatistics.requestResourceType = request.getResourceType();
 
         URI locationEndPoint = null;
-        if(request != null && request.requestContext != null) {
+        if (request.requestContext != null) {
             this.retryContext = new RetryContext(request.requestContext.retryContext);
             if (request.requestContext.locationEndpointToRoute != null) {
                 locationEndPoint = request.requestContext.locationEndpointToRoute;
@@ -92,8 +101,8 @@ class ClientSideRequestStatistics {
         }
 
         synchronized (this) {
-            if (responseTime.isAfter(this.requestEndTime)) {
-                this.requestEndTime = responseTime;
+            if (responseTime.isAfter(this.requestEndTimeUTC)) {
+                this.requestEndTimeUTC = responseTime;
             }
 
             if (locationEndPoint != null) {
@@ -101,7 +110,7 @@ class ClientSideRequestStatistics {
             }
 
             if (storeResponseStatistics.requestOperationType == OperationType.Head
-                || storeResponseStatistics.requestOperationType == OperationType.HeadFeed) {
+                    || storeResponseStatistics.requestOperationType == OperationType.HeadFeed) {
                 this.supplementalResponseStatisticsList.add(storeResponseStatistics);
             } else {
                 this.responseStatisticsList.add(storeResponseStatistics);
@@ -109,28 +118,36 @@ class ClientSideRequestStatistics {
         }
     }
 
-    void recordGatewayResponse(RxDocumentServiceRequest rxDocumentServiceRequest, StoreResponse storeResponse, CosmosClientException exception) {
+    void recordGatewayResponse(
+        RxDocumentServiceRequest rxDocumentServiceRequest, StoreResponse storeResponse,
+        CosmosClientException exception) {
         ZonedDateTime responseTime = ZonedDateTime.now(ZoneOffset.UTC);
         connectionMode = ConnectionMode.GATEWAY;
         synchronized (this) {
-            if (responseTime.isAfter(this.requestEndTime)) {
-                this.requestEndTime = responseTime;
+            if (responseTime.isAfter(this.requestEndTimeUTC)) {
+                this.requestEndTimeUTC = responseTime;
             }
 
-            if(rxDocumentServiceRequest != null && rxDocumentServiceRequest.requestContext != null && rxDocumentServiceRequest.requestContext.retryContext != null) {
+            if (rxDocumentServiceRequest != null
+                    && rxDocumentServiceRequest.requestContext != null
+                    && rxDocumentServiceRequest.requestContext.retryContext != null) {
                 rxDocumentServiceRequest.requestContext.retryContext.retryEndTime = ZonedDateTime.now(ZoneOffset.UTC);
                 this.retryContext = new RetryContext(rxDocumentServiceRequest.requestContext.retryContext);
             }
 
             this.gatewayStatistics = new GatewayStatistics();
-            this.gatewayStatistics.operationType = rxDocumentServiceRequest.getOperationType();
+            if (rxDocumentServiceRequest != null) {
+                this.gatewayStatistics.operationType = rxDocumentServiceRequest.getOperationType();
+            }
             if (storeResponse != null) {
                 this.gatewayStatistics.statusCode = storeResponse.getStatus();
                 this.gatewayStatistics.subStatusCode = DirectBridgeInternal.getSubStatusCode(storeResponse);
-                this.gatewayStatistics.sessionToken = storeResponse.getHeaderValue(HttpConstants.HttpHeaders.SESSION_TOKEN);
-                this.gatewayStatistics.requestCharge = storeResponse.getHeaderValue(HttpConstants.HttpHeaders.REQUEST_CHARGE);
+                this.gatewayStatistics.sessionToken = storeResponse
+                                                          .getHeaderValue(HttpConstants.HttpHeaders.SESSION_TOKEN);
+                this.gatewayStatistics.requestCharge = storeResponse
+                                                           .getHeaderValue(HttpConstants.HttpHeaders.REQUEST_CHARGE);
                 this.gatewayStatistics.requestTimeline = DirectBridgeInternal.getRequestTimeline(storeResponse);
-            } else if(exception != null){
+            } else if (exception != null) {
                 this.gatewayStatistics.statusCode = exception.getStatusCode();
                 this.gatewayStatistics.subStatusCode = exception.getSubStatusCode();
                 this.gatewayStatistics.requestTimeline = this.transportRequestTimeline;
@@ -166,11 +183,12 @@ class ClientSideRequestStatistics {
 
         synchronized (this) {
             if (!this.addressResolutionStatistics.containsKey(identifier)) {
-                throw new IllegalArgumentException("Identifier " + identifier + " does not exist. Please call start before calling end");
+                throw new IllegalArgumentException("Identifier " + identifier + " does not exist. Please call start "
+                                                       + "before calling end");
             }
 
-            if (responseTime.isAfter(this.requestEndTime)) {
-                this.requestEndTime = responseTime;
+            if (responseTime.isAfter(this.requestEndTimeUTC)) {
+                this.requestEndTimeUTC = responseTime;
             }
 
             AddressResolutionStatistics resolutionStatistics = this.addressResolutionStatistics.get(identifier);
@@ -183,7 +201,7 @@ class ClientSideRequestStatistics {
     }
 
     void setContactedReplicas(List<URI> contactedReplicas) {
-        this.contactedReplicas = contactedReplicas;
+        this.contactedReplicas = Collections.synchronizedList(contactedReplicas);
     }
 
     Set<URI> getFailedReplicas() {
@@ -191,7 +209,7 @@ class ClientSideRequestStatistics {
     }
 
     void setFailedReplicas(Set<URI> failedReplicas) {
-        this.failedReplicas = failedReplicas;
+        this.failedReplicas = Collections.synchronizedSet(failedReplicas);
     }
 
     Set<URI> getRegionsContacted() {
@@ -199,17 +217,18 @@ class ClientSideRequestStatistics {
     }
 
     void setRegionsContacted(Set<URI> regionsContacted) {
-        this.regionsContacted = regionsContacted;
+        this.regionsContacted = Collections.synchronizedSet(regionsContacted);
     }
 
-    private static String formatDateTime(ZonedDateTime dateTime) {
-        if (dateTime == null) {
-            return null;
-        }
-        return dateTime.format(RESPONSE_TIME_FORMATTER);
+    MetadataDiagnosticsContext getMetadataDiagnosticsContext(){
+        return this.metadataDiagnosticsContext;
     }
 
-    public void recordRetryContext(RxDocumentServiceRequest request) {
+    SerializationDiagnosticsContext getSerializationDiagnosticsContext(){
+        return this.serializationDiagnosticsContext;
+    }
+
+    void recordRetryContext(RxDocumentServiceRequest request) {
         if(request.requestContext.retryContext != null) {
             request.requestContext.retryContext.retryEndTime =  ZonedDateTime.now(ZoneOffset.UTC);
             this.retryContext = new RetryContext(request.requestContext.retryContext);
@@ -218,79 +237,74 @@ class ClientSideRequestStatistics {
 
     static class StoreResponseStatistics {
         @JsonSerialize(using = StoreResult.StoreResultSerializer.class)
-        public StoreResult storeResult;
+        StoreResult storeResult;
         @JsonSerialize(using = ZonedDateTimeSerializer.class)
-        public ZonedDateTime requestResponseTime;
-        public ResourceType requestResourceType;
-        public OperationType requestOperationType;
-    }
-
-    private class AddressResolutionStatistics {
-        @JsonSerialize(using = ZonedDateTimeSerializer.class)
-        public ZonedDateTime startTime;
-        @JsonSerialize(using = ZonedDateTimeSerializer.class)
-        public ZonedDateTime endTime;
-        public String targetEndpoint;
-    }
-
-    private class GatewayStatistics {
-        public String sessionToken;
-        public OperationType operationType;
-        public int statusCode;
-        public int subStatusCode;
-        public String requestCharge;
-        public RequestTimeline requestTimeline;
+        ZonedDateTime requestResponseTime;
+        ResourceType requestResourceType;
+        OperationType requestOperationType;
     }
 
     private static class SystemInformation {
-        public String usedMemory;
-        public String availableMemory;
-        public String processCpuLoad;
-        public String systemCpuLoad;
-    }
+        String usedMemory;
+        String availableMemory;
+        String processCpuLoad;
+        String systemCpuLoad;
 
-    private static class ZonedDateTimeSerializer extends StdSerializer<ZonedDateTime> {
-
-        public ZonedDateTimeSerializer() {
-            super(ZonedDateTime.class);
+        public String getUsedMemory() {
+            return usedMemory;
         }
 
-        @Override
-        public void serialize(ZonedDateTime zonedDateTime,
-                              JsonGenerator jsonGenerator,
-                              SerializerProvider serializerProvider) throws IOException {
-            jsonGenerator.writeObject(formatDateTime(zonedDateTime));
+        public String getAvailableMemory() {
+            return availableMemory;
+        }
+
+        public String getProcessCpuLoad() {
+            return processCpuLoad;
+        }
+
+        public String getSystemCpuLoad() {
+            return systemCpuLoad;
         }
     }
 
     public static class ClientSideRequestStatisticsSerializer extends StdSerializer<ClientSideRequestStatistics> {
 
-        public ClientSideRequestStatisticsSerializer(){
+        private static final long serialVersionUID = -2746532297176812860L;
+
+        ClientSideRequestStatisticsSerializer() {
             super(ClientSideRequestStatistics.class);
         }
 
         @Override
-        public void serialize(ClientSideRequestStatistics statistics, JsonGenerator generator, SerializerProvider provider) throws IOException {
+        public void serialize(
+            ClientSideRequestStatistics statistics, JsonGenerator generator, SerializerProvider provider) throws
+            IOException {
             generator.writeStartObject();
-            long requestLatency = statistics.getRequestLatency().toMillis();;
+            long requestLatency = statistics.getRequestLatency().toMillis();
             generator.writeNumberField("requestLatency", requestLatency);
-            generator.writeStringField("requestStartTime", formatDateTime(statistics.requestStartTime));
-            generator.writeStringField("requestEndTime", formatDateTime(statistics.requestEndTime));
+            generator.writeStringField("requestStartTimeUTC", ZonedDateTimeSerializer.formatDateTime(statistics.requestStartTimeUTC));
+            generator.writeStringField("requestEndTimeUTC", ZonedDateTimeSerializer.formatDateTime(statistics.requestEndTimeUTC));
             generator.writeObjectField("connectionMode", statistics.connectionMode);
             generator.writeObjectField("responseStatisticsList", statistics.responseStatisticsList);
             int supplementalResponseStatisticsListCount = statistics.supplementalResponseStatisticsList.size();
             int initialIndex =
                 Math.max(supplementalResponseStatisticsListCount - MAX_SUPPLEMENTAL_REQUESTS_FOR_TO_STRING, 0);
             if (initialIndex != 0) {
-                List<StoreResponseStatistics> subList = statistics.supplementalResponseStatisticsList.subList(initialIndex, supplementalResponseStatisticsListCount);
+                List<StoreResponseStatistics> subList = statistics.supplementalResponseStatisticsList
+                                                            .subList(initialIndex,
+                                                                     supplementalResponseStatisticsListCount);
                 generator.writeObjectField("supplementalResponseStatisticsList", subList);
-            } else{
-                generator.writeObjectField("supplementalResponseStatisticsList", statistics.supplementalResponseStatisticsList);
+            } else {
+                generator
+                    .writeObjectField("supplementalResponseStatisticsList",
+                                      statistics.supplementalResponseStatisticsList);
             }
 
             generator.writeObjectField("addressResolutionStatistics", statistics.addressResolutionStatistics);
             generator.writeObjectField("regionsContacted", statistics.regionsContacted);
             generator.writeObjectField("retryContext", statistics.retryContext);
+            generator.writeObjectField("metadataDiagnosticsContext", statistics.getMetadataDiagnosticsContext());
+            generator.writeObjectField("serializationDiagnosticsContext", statistics.getSerializationDiagnosticsContext());
             generator.writeObjectField("gatewayStatistics", statistics.gatewayStatistics);
 
             try {
@@ -302,14 +316,55 @@ class ClientSideRequestStatistics {
                 systemInformation.availableMemory = (maxMemory - (totalMemory - freeMemory)) + " KB";
 
                 OperatingSystemMXBean mbean = (com.sun.management.OperatingSystemMXBean)
-                    ManagementFactory.getOperatingSystemMXBean();
-                systemInformation.processCpuLoad = mbean.getProcessCpuLoad()*100 +  " %";
-                systemInformation.systemCpuLoad = mbean.getSystemCpuLoad()*100 +  " %";
+                                                  ManagementFactory.getOperatingSystemMXBean();
+                systemInformation.processCpuLoad = mbean.getProcessCpuLoad() * 100 + " %";
+                systemInformation.systemCpuLoad = mbean.getSystemCpuLoad() * 100 + " %";
                 generator.writeObjectField("systemInformation", systemInformation);
             } catch (Exception e) {
                 // Error while evaluating system information, do nothing
             }
             generator.writeEndObject();
+        }
+    }
+
+    private static class AddressResolutionStatistics {
+        @JsonSerialize(using = ZonedDateTimeSerializer.class)
+        ZonedDateTime startTime;
+        @JsonSerialize(using = ZonedDateTimeSerializer.class)
+        ZonedDateTime endTime;
+        String targetEndpoint;
+    }
+
+    private static class GatewayStatistics {
+        String sessionToken;
+        OperationType operationType;
+        int statusCode;
+        int subStatusCode;
+        String requestCharge;
+        RequestTimeline requestTimeline;
+
+        public String getSessionToken() {
+            return sessionToken;
+        }
+
+        public OperationType getOperationType() {
+            return operationType;
+        }
+
+        public int getStatusCode() {
+            return statusCode;
+        }
+
+        public int getSubStatusCode() {
+            return subStatusCode;
+        }
+
+        public String getRequestCharge() {
+            return requestCharge;
+        }
+
+        public RequestTimeline getRequestTimeline() {
+            return requestTimeline;
         }
     }
 }

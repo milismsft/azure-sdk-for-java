@@ -3,32 +3,34 @@
 package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.CompositePath;
-import com.azure.cosmos.CompositePathSortOrder;
+import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.GatewayConnectionConfig;
+import com.azure.cosmos.models.CompositePath;
+import com.azure.cosmos.models.CompositePathSortOrder;
 import com.azure.cosmos.ConnectionMode;
-import com.azure.cosmos.ConnectionPolicy;
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosClientException;
-import com.azure.cosmos.DataType;
+import com.azure.cosmos.models.DataType;
 import com.azure.cosmos.DocumentClientTest;
-import com.azure.cosmos.FeedOptions;
-import com.azure.cosmos.FeedResponse;
-import com.azure.cosmos.IncludedPath;
-import com.azure.cosmos.Index;
-import com.azure.cosmos.IndexingPolicy;
-import com.azure.cosmos.PartitionKey;
-import com.azure.cosmos.PartitionKeyDefinition;
-import com.azure.cosmos.Resource;
-import com.azure.cosmos.RetryOptions;
-import com.azure.cosmos.SqlQuerySpec;
+import com.azure.cosmos.models.FeedOptions;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.IncludedPath;
+import com.azure.cosmos.models.Index;
+import com.azure.cosmos.models.IndexingPolicy;
+import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.PartitionKeyDefinition;
+import com.azure.cosmos.ThrottlingRetryOptions;
+import com.azure.cosmos.models.SqlQuerySpec;
+import com.azure.cosmos.TestNGLogListener;
 import com.azure.cosmos.implementation.AsyncDocumentClient.Builder;
 import com.azure.cosmos.implementation.directconnectivity.Protocol;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.CaseFormat;
-import com.google.common.collect.ImmutableList;
+import com.azure.cosmos.implementation.guava25.base.CaseFormat;
+import com.azure.cosmos.implementation.guava25.collect.ImmutableList;
 import io.reactivex.subscribers.TestSubscriber;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -39,10 +41,12 @@ import org.slf4j.LoggerFactory;
 import org.testng.annotations.AfterSuite;
 import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.DataProvider;
+import org.testng.annotations.Listeners;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -53,6 +57,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doAnswer;
 
+@Listeners({TestNGLogListener.class})
 public class TestSuiteBase extends DocumentClientTest {
 
     private static final int DEFAULT_BULK_INSERT_CONCURRENCY_LEVEL = 500;
@@ -172,7 +177,7 @@ public class TestSuiteBase extends DocumentClientTest {
             FeedOptions options = new FeedOptions();
             options.setMaxDegreeOfParallelism(-1);
 
-            options.maxItemCount(100);
+            ModelBridgeInternal.setFeedOptionsMaxItemCount(options, 100);
 
             logger.info("Truncating collection {} documents ...", collection.getId());
 
@@ -184,9 +189,9 @@ public class TestSuiteBase extends DocumentClientTest {
 
                         if (paths != null && !paths.isEmpty()) {
                             List<String> pkPath = PathParser.getPathParts(paths.get(0));
-                            Object propertyValue = doc.getObjectByPath(pkPath);
+                            Object propertyValue = ModelBridgeInternal.getObjectByPathFromJsonSerializable(doc, pkPath);
                             if (propertyValue == null) {
-                                propertyValue = Undefined.Value();
+                                propertyValue = Undefined.value();
                             }
 
                             requestOptions.setPartitionKey(new PartitionKey(propertyValue));
@@ -250,6 +255,7 @@ public class TestSuiteBase extends DocumentClientTest {
         logger.info("Finished truncating collection {}.", collection.getId());
     }
 
+    @SuppressWarnings("fallthrough")
     protected static void waitIfNeededForReplicasToCatchUp(Builder clientBuilder) {
         switch (clientBuilder.getDesiredConsistencyLevel()) {
             case EVENTUAL:
@@ -433,10 +439,6 @@ public class TestSuiteBase extends DocumentClientTest {
         return bulkInsert(client, collectionLink, documentDefinitionList, DEFAULT_BULK_INSERT_CONCURRENCY_LEVEL);
     }
 
-    public static ConsistencyLevel getAccountDefaultConsistencyLevel(AsyncDocumentClient client) {
-        return BridgeInternal.getConsistencyPolicy(client.getDatabaseAccount().single().block()).getDefaultConsistencyLevel();
-    }
-
     public static User createUser(AsyncDocumentClient client, String databaseId, User user) {
         return client.createUser("dbs/" + databaseId, user, null).single().block().getResource();
     }
@@ -479,11 +481,11 @@ public class TestSuiteBase extends DocumentClientTest {
         includedPath.setPath("/*");
         Collection<Index> indexes = new ArrayList<>();
         Index stringIndex = Index.range(DataType.STRING);
-        BridgeInternal.setProperty(stringIndex, "precision", -1);
+        BridgeInternal.setProperty(ModelBridgeInternal.getJsonSerializableFromIndex(stringIndex), "precision", -1);
         indexes.add(stringIndex);
 
         Index numberIndex = Index.range(DataType.NUMBER);
-        BridgeInternal.setProperty(numberIndex, "precision", -1);
+        BridgeInternal.setProperty(ModelBridgeInternal.getJsonSerializableFromIndex(numberIndex), "precision", -1);
         indexes.add(numberIndex);
         includedPath.setIndexes(indexes);
         includedPaths.add(includedPath);
@@ -512,7 +514,7 @@ public class TestSuiteBase extends DocumentClientTest {
 
     public static void deleteDocumentIfExists(AsyncDocumentClient client, String databaseId, String collectionId, String docId) {
         FeedOptions options = new FeedOptions();
-        options.partitionKey(new PartitionKey(docId));
+        options.setPartitionKey(new PartitionKey(docId));
         List<Document> res = client
                 .queryDocuments(TestUtils.getCollectionNameLink(databaseId, collectionId), String.format("SELECT * FROM root r where r.id = '%s'", docId), options)
                 .single().block().getResults();
@@ -725,15 +727,15 @@ public class TestSuiteBase extends DocumentClientTest {
 
     @DataProvider
     public static Object[][] clientBuilders() {
-        return new Object[][]{{createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null)}};
+        return new Object[][]{{createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true)}};
     }
 
     @DataProvider
     public static Object[][] clientBuildersWithSessionConsistency() {
         return new Object[][]{
-                {createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null)},
-                {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.HTTPS, false, null)},
-                {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.TCP, false, null)}
+                {createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true)},
+                {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.HTTPS, false, null, true)},
+                {createDirectRxDocumentClient(ConsistencyLevel.SESSION, Protocol.TCP, false, null, true)}
         };
     }
 
@@ -781,28 +783,28 @@ public class TestSuiteBase extends DocumentClientTest {
 
     @DataProvider
     public static Object[][] simpleClientBuildersWithDirect() {
-        return simpleClientBuildersWithDirect(toArray(protocols));
+        return simpleClientBuildersWithDirect(true, toArray(protocols));
     }
 
     @DataProvider
     public static Object[][] simpleClientBuildersWithDirectHttps() {
-        return simpleClientBuildersWithDirect(Protocol.HTTPS);
+        return simpleClientBuildersWithDirect(true, Protocol.HTTPS);
     }
 
-    private static Object[][] simpleClientBuildersWithDirect(Protocol... protocols) {
+    private static Object[][] simpleClientBuildersWithDirect(boolean contentResponseOnWriteEnabled, Protocol... protocols) {
         logger.info("Max test consistency to use is [{}]", accountConsistency);
         List<ConsistencyLevel> testConsistencies = ImmutableList.of(ConsistencyLevel.EVENTUAL);
 
         boolean isMultiMasterEnabled = preferredLocations != null && accountConsistency == ConsistencyLevel.SESSION;
 
         List<Builder> builders = new ArrayList<>();
-        builders.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null));
+        builders.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, contentResponseOnWriteEnabled));
 
         for (Protocol protocol : protocols) {
             testConsistencies.forEach(consistencyLevel -> builders.add(createDirectRxDocumentClient(consistencyLevel,
                                                                                                     protocol,
                                                                                                     isMultiMasterEnabled,
-                                                                                                    preferredLocations)));
+                                                                                                    preferredLocations, contentResponseOnWriteEnabled)));
         }
 
         builders.forEach(b -> logger.info("Will Use ConnectionMode [{}], Consistency [{}], Protocol [{}]",
@@ -836,12 +838,12 @@ public class TestSuiteBase extends DocumentClientTest {
     private static Object[][] clientBuildersWithDirectSession(Protocol... protocols) {
         return clientBuildersWithDirect(new ArrayList<ConsistencyLevel>() {{
             add(ConsistencyLevel.SESSION);
-        }}, protocols);
+        }}, true, protocols);
     }
 
     private static Object[][] clientBuildersWithDirectAllConsistencies(Protocol... protocols) {
         logger.info("Max test consistency to use is [{}]", accountConsistency);
-        return clientBuildersWithDirect(desiredConsistencies, protocols);
+        return clientBuildersWithDirect(desiredConsistencies, true, protocols);
     }
 
     static List<ConsistencyLevel> parseDesiredConsistencies(String consistencies) {
@@ -861,6 +863,7 @@ public class TestSuiteBase extends DocumentClientTest {
         }
     }
 
+    @SuppressWarnings("fallthrough")
     static List<ConsistencyLevel> allEqualOrLowerConsistencies(ConsistencyLevel accountConsistency) {
         List<ConsistencyLevel> testConsistencies = new ArrayList<>();
         switch (accountConsistency) {
@@ -881,17 +884,17 @@ public class TestSuiteBase extends DocumentClientTest {
         return testConsistencies;
     }
 
-    private static Object[][] clientBuildersWithDirect(List<ConsistencyLevel> testConsistencies, Protocol... protocols) {
+    private static Object[][] clientBuildersWithDirect(List<ConsistencyLevel> testConsistencies, boolean contentResponseOnWriteEnabled, Protocol... protocols) {
         boolean isMultiMasterEnabled = preferredLocations != null && accountConsistency == ConsistencyLevel.SESSION;
 
         List<Builder> builders = new ArrayList<>();
-        builders.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, isMultiMasterEnabled, preferredLocations));
+        builders.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, isMultiMasterEnabled, preferredLocations, contentResponseOnWriteEnabled));
 
         for (Protocol protocol : protocols) {
             testConsistencies.forEach(consistencyLevel -> builders.add(createDirectRxDocumentClient(consistencyLevel,
                                                                                                     protocol,
                                                                                                     isMultiMasterEnabled,
-                                                                                                    preferredLocations)));
+                                                                                                    preferredLocations, contentResponseOnWriteEnabled)));
         }
 
         builders.forEach(b -> logger.info("Will Use ConnectionMode [{}], Consistency [{}], Protocol [{}]",
@@ -904,55 +907,57 @@ public class TestSuiteBase extends DocumentClientTest {
     }
 
     static protected Builder createGatewayHouseKeepingDocumentClient() {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setConnectionMode(ConnectionMode.GATEWAY);
-        RetryOptions options = new RetryOptions();
-        options.setMaxRetryWaitTimeInSeconds(SUITE_SETUP_TIMEOUT);
-        connectionPolicy.setRetryOptions(options);
+        GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
+        ThrottlingRetryOptions options = new ThrottlingRetryOptions();
+        options.setMaxRetryWaitTime(Duration.ofSeconds(SUITE_SETUP_TIMEOUT));
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(gatewayConnectionConfig);
+        connectionPolicy.setThrottlingRetryOptions(options);
         return new Builder().withServiceEndpoint(TestConfigurations.HOST)
                 .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
                 .withConnectionPolicy(connectionPolicy)
-                .withConsistencyLevel(ConsistencyLevel.SESSION);
+                .withConsistencyLevel(ConsistencyLevel.SESSION).withContentResponseOnWriteEnabled(true);
     }
 
-    static protected Builder createGatewayRxDocumentClient(ConsistencyLevel consistencyLevel, boolean multiMasterEnabled, List<String> preferredLocations) {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setConnectionMode(ConnectionMode.GATEWAY);
-        connectionPolicy.setUsingMultipleWriteLocations(multiMasterEnabled);
-        connectionPolicy.setPreferredLocations(preferredLocations);
+    static protected Builder createGatewayRxDocumentClient(ConsistencyLevel consistencyLevel, boolean multiMasterEnabled, List<String> preferredLocations, boolean contentResponseOnWriteEnabled) {
+        GatewayConnectionConfig gatewayConnectionConfig = new GatewayConnectionConfig();
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(gatewayConnectionConfig);
+        connectionPolicy.setMultipleWriteRegionsEnabled(multiMasterEnabled);
+        connectionPolicy.setPreferredRegions(preferredLocations);
         return new Builder().withServiceEndpoint(TestConfigurations.HOST)
-                .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
-                .withConnectionPolicy(connectionPolicy)
-                .withConsistencyLevel(consistencyLevel);
+                            .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
+                            .withConnectionPolicy(connectionPolicy)
+                            .withConsistencyLevel(consistencyLevel)
+                            .withContentResponseOnWriteEnabled(contentResponseOnWriteEnabled);
     }
 
     static protected Builder createGatewayRxDocumentClient() {
-        return createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null);
+        return createGatewayRxDocumentClient(ConsistencyLevel.SESSION, false, null, true);
     }
 
     static protected Builder createDirectRxDocumentClient(ConsistencyLevel consistencyLevel,
-                                                                              Protocol protocol,
-                                                                              boolean multiMasterEnabled,
-                                                                              List<String> preferredLocations) {
-        ConnectionPolicy connectionPolicy = new ConnectionPolicy();
-        connectionPolicy.setConnectionMode(ConnectionMode.DIRECT);
+                                                          Protocol protocol,
+                                                          boolean multiMasterEnabled,
+                                                          List<String> preferredRegions,
+                                                          boolean contentResponseOnWriteEnabled) {
+        DirectConnectionConfig directConnectionConfig = new DirectConnectionConfig();
 
-        if (preferredLocations != null) {
-            connectionPolicy.setPreferredLocations(preferredLocations);
+        ConnectionPolicy connectionPolicy = new ConnectionPolicy(directConnectionConfig);
+        if (preferredRegions != null) {
+            connectionPolicy.setPreferredRegions(preferredRegions);
         }
 
         if (multiMasterEnabled && consistencyLevel == ConsistencyLevel.SESSION) {
-            connectionPolicy.setUsingMultipleWriteLocations(true);
+            connectionPolicy.setMultipleWriteRegionsEnabled(true);
         }
-
         Configs configs = Mockito.spy(new Configs());
         doAnswer((Answer<Protocol>)invocation -> protocol).when(configs).getProtocol();
 
         return new Builder().withServiceEndpoint(TestConfigurations.HOST)
-                .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
-                .withConnectionPolicy(connectionPolicy)
-                .withConsistencyLevel(consistencyLevel)
-                .withConfigs(configs);
+                            .withMasterKeyOrResourceToken(TestConfigurations.MASTER_KEY)
+                            .withConnectionPolicy(connectionPolicy)
+                            .withConsistencyLevel(consistencyLevel)
+                            .withConfigs(configs)
+                            .withContentResponseOnWriteEnabled(contentResponseOnWriteEnabled);
     }
 
     protected int expectedNumberOfPages(int totalExpectedResult, int maxPageSize) {

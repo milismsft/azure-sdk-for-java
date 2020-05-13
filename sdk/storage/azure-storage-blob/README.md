@@ -15,14 +15,14 @@ definition, such as text or binary data.
 - [Azure Subscription][azure_subscription]
 - [Create Storage Account][storage_account]
 
-### Adding the package to your product
+### Include the package
 
 [//]: # ({x-version-update-start;com.azure:azure-storage-blob;current})
 ```xml
 <dependency>
     <groupId>com.azure</groupId>
     <artifactId>azure-storage-blob</artifactId>
-    <version>12.4.0</version>
+    <version>12.6.1</version>
 </dependency>
 ```
 [//]: # ({x-version-update-end})
@@ -36,6 +36,9 @@ az storage account create \
     --name <storage-account-name> \
     --location <location>
 ```
+
+Your storage account URL, subsequently identified as <your-storage-account-url>, would be formatted as follows
+http(s)://<storage-account-name>.blob.core.windows.net
 
 ### Authenticate the client
 
@@ -104,6 +107,32 @@ Blob Storage is designed for:
 - Writing to log files
 - Storing data for backup and restore, disaster recovery, and archiving
 - Storing data for analysis by an on-premises or Azure-hosted service
+
+### URL format
+Blobs are addressable using the following URL format:
+The following URL addresses a blob:
+https://myaccount.blob.core.windows.net/mycontainer/myblob
+
+#### Resource URI Syntax
+For the storage account, the base URI for blob operations includes the name of the account only:
+
+```
+https://myaccount.blob.core.windows.net
+```
+
+For a container, the base URI includes the name of the account and the name of the container:
+
+```
+https://myaccount.blob.core.windows.net/mycontainer
+```
+
+For a blob, the base URI includes the name of the account, the name of the container and the name of the blob:
+
+```
+https://myaccount.blob.core.windows.net/mycontainer/myblob
+```
+
+Note that the above URIs may not hold for more advanced scenarios such as custom domain names.
 
 ## Examples
 
@@ -297,14 +326,14 @@ status codes returned for [REST API][error_codes] requests. For example, if you 
 doesn't exist in your Storage Account, a `404` error is returned, indicating `Not Found`.
 
 ### Default HTTP Client
-All client libraries by default use the Netty HTTP client. Adding the above dependency will automatically configure 
+All client libraries by default use the Netty HTTP client. Adding the above dependency will automatically configure
 the client library to use the Netty HTTP client. Configuring or changing the HTTP client is detailed in the
 [HTTP clients wiki](https://github.com/Azure/azure-sdk-for-java/wiki/HTTP-clients).
 
 ### Default SSL library
-All client libraries, by default, use the Tomcat-native Boring SSL library to enable native-level performance for SSL 
-operations. The Boring SSL library is an uber jar containing native libraries for Linux / macOS / Windows, and provides 
-better performance compared to the default SSL implementation within the JDK. For more information, including how to 
+All client libraries, by default, use the Tomcat-native Boring SSL library to enable native-level performance for SSL
+operations. The Boring SSL library is an uber jar containing native libraries for Linux / macOS / Windows, and provides
+better performance compared to the default SSL implementation within the JDK. For more information, including how to
 reduce the dependency size, refer to the [performance tuning][performance_tuning] section of the wiki.
 
 ## Next steps

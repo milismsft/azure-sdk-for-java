@@ -10,9 +10,10 @@ import com.azure.core.http.HttpRequest;
 import com.azure.core.http.HttpResponse;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.implementation.HttpProxyExceptionHandler;
+import com.azure.core.util.CoreUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.proxy.ProxyHandler;
 import org.reactivestreams.Publisher;
@@ -37,7 +38,7 @@ import java.util.regex.Pattern;
 /**
  * This class provides a Netty-based implementation for the {@link HttpClient} interface. Creating an instance of this
  * class can be achieved by using the {@link NettyAsyncHttpClientBuilder} class, which offers Netty-specific API for
- * features such as {@link NettyAsyncHttpClientBuilder#nioEventLoopGroup(NioEventLoopGroup) thread pooling}, {@link
+ * features such as {@link NettyAsyncHttpClientBuilder#eventLoopGroup(EventLoopGroup) thread pooling}, {@link
  * NettyAsyncHttpClientBuilder#wiretap(boolean) wiretapping}, {@link NettyAsyncHttpClientBuilder#proxy(ProxyOptions)
  * setProxy configuration}, and much more.
  *
@@ -45,8 +46,9 @@ import java.util.regex.Pattern;
  * @see NettyAsyncHttpClientBuilder
  */
 class NettyAsyncHttpClient implements HttpClient {
+    private static final Pattern CHARSET_PATTERN = Pattern.compile("charset=(\\S+)\\b", Pattern.CASE_INSENSITIVE);
 
-    private final NioEventLoopGroup eventLoopGroup;
+    private final EventLoopGroup eventLoopGroup;
     private final Supplier<ProxyHandler> proxyHandlerSupplier;
     private final Pattern nonProxyHostsPattern;
     private final boolean disableBufferCopy;
@@ -64,11 +66,11 @@ class NettyAsyncHttpClient implements HttpClient {
      * Creates NettyAsyncHttpClient with provided http client.
      *
      * @param nettyClient the reactor-netty http client
-     * @param eventLoopGroup {@link NioEventLoopGroup} that processes requests.
+     * @param eventLoopGroup {@link EventLoopGroup} that processes requests.
      * @param proxyHandlerSupplier Supplier that returns the {@link ProxyHandler} that connects to the configured
      * proxy.
      */
-    NettyAsyncHttpClient(reactor.netty.http.client.HttpClient nettyClient, NioEventLoopGroup eventLoopGroup,
+    NettyAsyncHttpClient(reactor.netty.http.client.HttpClient nettyClient, EventLoopGroup eventLoopGroup,
         Supplier<ProxyHandler> proxyHandlerSupplier, String nonProxyHosts, boolean disableBufferCopy) {
         this.nettyClient = nettyClient;
         this.eventLoopGroup = eventLoopGroup;
@@ -160,8 +162,6 @@ class NettyAsyncHttpClient implements HttpClient {
     }
 
     static class ReactorNettyHttpResponse extends HttpResponse {
-
-        private static final ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new byte[0]);
         private final HttpClientResponse reactorNettyResponse;
         private final Connection reactorNettyConnection;
         private final boolean disableBufferCopy;
@@ -211,11 +211,8 @@ class NettyAsyncHttpClient implements HttpClient {
 
         @Override
         public Mono<String> getBodyAsString() {
-            return bodyIntern().aggregate().asString().doFinally(s -> {
-                if (!reactorNettyConnection.isDisposed()) {
-                    reactorNettyConnection.channel().eventLoop().execute(reactorNettyConnection::dispose);
-                }
-            });
+            return getBodyAsByteArray().map(bytes ->
+                CoreUtils.bomAwareToString(bytes, reactorNettyResponse.responseHeaders().get("Content-Type")));
         }
 
         @Override

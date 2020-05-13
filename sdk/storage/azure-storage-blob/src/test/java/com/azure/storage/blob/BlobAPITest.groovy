@@ -120,6 +120,20 @@ class BlobAPITest extends APISpec {
         3 * Constants.MB| Constants.MB  || 3
     }
 
+    @Requires({ liveMode() }) // Reading from recordings will not allow for the timing of the test to work correctly.
+    def "Upload timeout"() {
+        setup:
+        def size = 1024
+        def randomData = getRandomByteArray(size)
+        def input = new ByteArrayInputStream(randomData)
+
+        when:
+        bc.uploadWithResponse(input, size, null, null, null, null, null, Duration.ofNanos(5L), null)
+
+        then:
+        thrown(IllegalStateException)
+    }
+
     def "Download all null"() {
         when:
         def stream = new ByteArrayOutputStream()
@@ -1079,6 +1093,7 @@ class BlobAPITest extends APISpec {
         key1  | value1 | key2   | value2 || statusCode
         null  | null   | null   | null   || 200
         "foo" | "bar"  | "fizz" | "buzz" || 200
+        "i0"  | "a"    | "i_"   | "a"    || 200 /* Test culture sensitive word sort */
     }
 
     @Unroll

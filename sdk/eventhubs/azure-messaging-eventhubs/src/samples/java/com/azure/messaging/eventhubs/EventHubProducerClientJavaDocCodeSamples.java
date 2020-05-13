@@ -5,6 +5,7 @@ package com.azure.messaging.eventhubs;
 
 import com.azure.messaging.eventhubs.models.CreateBatchOptions;
 
+import com.azure.messaging.eventhubs.models.SendOptions;
 import java.util.Arrays;
 import java.util.List;
 
@@ -40,7 +41,7 @@ public class EventHubProducerClientJavaDocCodeSamples {
      * @throws IllegalArgumentException if an event is too large for an empty batch.
      */
     public void batchAutomaticRouting() {
-        // BEGIN: com.azure.messaging.eventhubs.eventhubasyncproducerclient.createBatch
+        // BEGIN: com.azure.messaging.eventhubs.eventhubproducerclient.createBatch
         // The required parameter is a way to authenticate with Event Hubs using credentials.
         // The connectionString provides a way to authenticate with Event Hub.
         EventHubProducerClient producer = new EventHubClientBuilder()
@@ -63,7 +64,7 @@ public class EventHubProducerClientJavaDocCodeSamples {
                 throw new IllegalArgumentException("Event is too large for an empty batch.");
             }
         }
-        // END: com.azure.messaging.eventhubs.eventhubasyncproducerclient.createBatch
+        // END: com.azure.messaging.eventhubs.eventhubproducerclient.createBatch
 
         producer.close();
     }
@@ -145,4 +146,31 @@ public class EventHubProducerClientJavaDocCodeSamples {
         }
         // END: com.azure.messaging.eventhubs.eventhubproducerclient.createBatch#CreateBatchOptions-int
     }
+
+    /**
+     * Code snippet to demonstrate how to send a list of events using {@link EventHubProducerClient#send(Iterable)}.
+     */
+    public void sendIterableSample() {
+        final EventHubProducerClient producer = builder.buildProducerClient();
+        // BEGIN: com.azure.messaging.eventhubs.eventhubproducerclient.send#Iterable
+        List<EventData> events = Arrays.asList(new EventData("maple"), new EventData("aspen"),
+            new EventData("oak"));
+        producer.send(events);
+        // END: com.azure.messaging.eventhubs.eventhubproducerclient.send#Iterable
+    }
+
+    /**
+     * Code snippet to demonstrate how to send a list of events using
+     * {@link EventHubProducerClient#send(Iterable, SendOptions)}.
+     */
+    public void sendIterableWithPartitionKeySample() {
+        final EventHubProducerClient producer = builder.buildProducerClient();
+        // BEGIN: com.azure.messaging.eventhubs.eventhubproducerclient.send#Iterable-SendOptions
+        List<EventData> events = Arrays.asList(new EventData("Melbourne"), new EventData("London"),
+            new EventData("New York"));
+        SendOptions sendOptions = new SendOptions().setPartitionKey("cities");
+        producer.send(events, sendOptions);
+        // END: com.azure.messaging.eventhubs.eventhubproducerclient.send#Iterable-SendOptions
+    }
+
 }

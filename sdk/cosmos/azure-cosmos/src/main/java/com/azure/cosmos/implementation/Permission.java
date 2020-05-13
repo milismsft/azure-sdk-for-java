@@ -4,16 +4,18 @@
 package com.azure.cosmos.implementation;
 
 import com.azure.cosmos.BridgeInternal;
-import com.azure.cosmos.PartitionKey;
-import com.azure.cosmos.PermissionMode;
-import com.azure.cosmos.Resource;
+import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.PermissionMode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import org.apache.commons.lang3.StringUtils;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
+
+import java.util.Locale;
 
 /**
- * Represents a per-User Permission to access a specific resource e.g. Document or Collection in the Azure Cosmos DB database service.
+ * Represents a per-User Permission to access a specific resource e.g. Document or Collection in the Azure Cosmos DB
+ * database service.
  */
-public class Permission extends Resource {
+public final class Permission extends Resource {
     /**
      * Initialize a permission object.
      */
@@ -32,10 +34,11 @@ public class Permission extends Resource {
 
     /**
      * Sets the id
+     *
      * @param id the name of the resource.
      * @return the current instance of permission
      */
-    public Permission setId(String id){
+    public Permission setId(String id) {
         super.setId(id);
         return this;
     }
@@ -75,7 +78,7 @@ public class Permission extends Resource {
      */
     public void setPermissionMode(PermissionMode permissionMode) {
         BridgeInternal.setProperty(this, Constants.Properties.PERMISSION_MODE,
-                permissionMode.toString().toLowerCase());
+                                   permissionMode.toString().toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -109,6 +112,9 @@ public class Permission extends Resource {
      * @param partitionkey the partition key.
      */
     public void setResourcePartitionKey(PartitionKey partitionkey) {
-        BridgeInternal.setProperty(this, Constants.Properties.RESOURCE_PARTITION_KEY, BridgeInternal.getPartitionKeyInternal(partitionkey).toJson());
+        BridgeInternal.setProperty(this,
+                                   Constants.Properties.RESOURCE_PARTITION_KEY,
+                                   BridgeInternal.getPartitionKeyInternal(partitionkey)
+                                       .toJson());
     }
 }

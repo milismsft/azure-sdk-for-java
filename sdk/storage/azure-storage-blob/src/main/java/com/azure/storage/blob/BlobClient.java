@@ -10,6 +10,7 @@ import com.azure.storage.blob.implementation.util.ModelHelper;
 import com.azure.storage.blob.models.AccessTier;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.ParallelTransferOptions;
 import com.azure.storage.blob.specialized.AppendBlobClient;
 import com.azure.storage.blob.specialized.BlobClientBase;
@@ -21,6 +22,7 @@ import com.azure.storage.common.implementation.Constants;
 import com.azure.storage.common.implementation.StorageImplUtils;
 import com.azure.storage.common.implementation.UploadUtils;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -167,21 +169,31 @@ public class BlobClient extends BlobClientBase {
     public void uploadWithResponse(InputStream data, long length, ParallelTransferOptions parallelTransferOptions,
         BlobHttpHeaders headers, Map<String, String> metadata, AccessTier tier, BlobRequestConditions requestConditions,
         Duration timeout, Context context) {
-        BlockBlobClient blockBlobClient = this.getBlockBlobClient();
         final ParallelTransferOptions validatedParallelTransferOptions =
             ModelHelper.populateAndApplyDefaults(parallelTransferOptions);
-        if (length < validatedParallelTransferOptions.getMaxSingleUploadSize()) {
-            blockBlobClient.uploadWithResponse(data, length, headers, metadata, tier, null, requestConditions,
-                timeout, context);
-        } else {
-            BlobOutputStream blobOutputStream = BlobOutputStream.blockBlobOutputStream(client,
-                validatedParallelTransferOptions, headers, metadata, tier, requestConditions);
+        Mono<Object> upload = Mono.fromCallable(() -> {
             try {
+                // BlobOutputStream will internally handle the decision for single-shot or multi-part upload.
+                BlobOutputStream blobOutputStream = BlobOutputStream.blockBlobOutputStream(client,
+                    validatedParallelTransferOptions, headers, metadata, tier, requestConditions, context);
                 StorageImplUtils.copyToOutputStream(data, length, blobOutputStream);
                 blobOutputStream.close();
+                return null;
             } catch (IOException e) {
-                e.printStackTrace();
+                Throwable cause = e.getCause();
+                if (cause instanceof BlobStorageException) {
+                    throw logger.logExceptionAsError((BlobStorageException) cause);
+                } else {
+                    throw logger.logExceptionAsError(new UncheckedIOException(e));
+                }
             }
+            // Subscribing has to happen on a different thread for the timeout to happen properly.
+        }).subscribeOn(Schedulers.elastic());
+
+        try {
+            StorageImplUtils.blockWithOptionalTimeout(upload, timeout);
+        } catch (UncheckedIOException e) {
+            throw logger.logExceptionAsError(e);
         }
     }
 

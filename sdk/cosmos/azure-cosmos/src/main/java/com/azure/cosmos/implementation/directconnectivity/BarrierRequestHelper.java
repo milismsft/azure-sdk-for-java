@@ -3,11 +3,10 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
-import com.azure.cosmos.InternalServerErrorException;
-import com.azure.cosmos.RequestVerb;
 import com.azure.cosmos.implementation.AuthorizationTokenType;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.IAuthorizationTokenProvider;
+import com.azure.cosmos.implementation.InternalServerErrorException;
 import com.azure.cosmos.implementation.OperationType;
 import com.azure.cosmos.implementation.PathsHelper;
 import com.azure.cosmos.implementation.RMResources;
@@ -16,12 +15,11 @@ import com.azure.cosmos.implementation.ResourceType;
 import com.azure.cosmos.implementation.RxDocumentServiceRequest;
 import com.azure.cosmos.implementation.Strings;
 import com.azure.cosmos.implementation.Utils;
+import com.azure.cosmos.implementation.RequestVerb;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
-
-import java.util.Map;
 
 public class BarrierRequestHelper {
     private final static Logger logger = LoggerFactory.getLogger(BarrierRequestHelper.class);
@@ -49,10 +47,10 @@ public class BarrierRequestHelper {
         if (!isCollectionHeadRequest) {
             // DB Feed
             barrierLsnRequest = RxDocumentServiceRequest.create(
-                    OperationType.HeadFeed,
-                    (String) null,
-                    (ResourceType) ResourceType.Database,
-                    (Map<String, String>) null);
+                OperationType.HeadFeed,
+                null,
+                ResourceType.Database,
+                null);
         } else if (request.getIsNameBased()) {
             // Name based server request
 

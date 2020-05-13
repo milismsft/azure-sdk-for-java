@@ -4,37 +4,35 @@
 package com.azure.ai.textanalytics.models;
 
 import com.azure.core.annotation.Immutable;
-
-import java.util.ArrayList;
-import java.util.List;
+import com.azure.core.util.IterableStream;
 
 /**
- * The RecognizeEntitiesResult model.
+ * The {@link RecognizeEntitiesResult} model.
  */
 @Immutable
-public final class RecognizeEntitiesResult extends DocumentResult {
-    private final List<CategorizedEntity> entities;
+public final class RecognizeEntitiesResult extends TextAnalyticsResult {
+    private final CategorizedEntityCollection entities;
 
     /**
-     * Creates a {@code RecognizeEntitiesResult} model that describes recognized entities result.
+     * Creates a {@link RecognizeEntitiesResult} model that describes recognized entities result.
      *
-     * @param id unique, non-empty document identifier
-     * @param textDocumentStatistics text document statistics
-     * @param error the document error
-     * @param entities a list of {@link CategorizedEntity}
+     * @param id Unique, non-empty document identifier.
+     * @param textDocumentStatistics The text document statistics.
+     * @param error The document error.
+     * @param entities A {@link CategorizedEntityCollection} contains entities and warnings.
      */
-    public RecognizeEntitiesResult(String id, TextDocumentStatistics textDocumentStatistics, TextAnalyticsError error,
-        List<CategorizedEntity> entities) {
+    public RecognizeEntitiesResult(String id, TextDocumentStatistics textDocumentStatistics,
+                                   TextAnalyticsError error, CategorizedEntityCollection entities) {
         super(id, textDocumentStatistics, error);
-        this.entities = entities == null ? new ArrayList<>() : entities;
+        this.entities = entities;
     }
 
     /**
-     * Get a list of categorized entities string.
+     * Get an {@link IterableStream} of {@link CategorizedEntity}.
      *
-     * @return a list of {@link CategorizedEntity}
+     * @return An {@link IterableStream} of {@link CategorizedEntity}.
      */
-    public List<CategorizedEntity> getEntities() {
+    public CategorizedEntityCollection getEntities() {
         throwExceptionIfError();
         return entities;
     }

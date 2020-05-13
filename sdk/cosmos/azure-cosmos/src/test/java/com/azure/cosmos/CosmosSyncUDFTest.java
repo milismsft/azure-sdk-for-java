@@ -3,7 +3,13 @@
 
 package com.azure.cosmos;
 
+import com.azure.cosmos.models.CosmosUserDefinedFunctionProperties;
+import com.azure.cosmos.models.CosmosUserDefinedFunctionResponse;
+import com.azure.cosmos.models.FeedOptions;
+import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.rx.TestSuiteBase;
+import com.azure.cosmos.util.CosmosPagedIterable;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Factory;
@@ -26,7 +32,7 @@ public class CosmosSyncUDFTest extends TestSuiteBase {
     @BeforeClass(groups = {"simple"}, timeOut = SETUP_TIMEOUT)
     public void before_CosmosSyncUDFTest() {
         assertThat(this.client).isNull();
-        this.client = clientBuilder().buildClient();
+        this.client = getClientBuilder().buildClient();
         CosmosAsyncContainer asyncContainer = getSharedMultiPartitionCosmosContainer(this.client.asyncClient());
         container = client.getDatabase(asyncContainer.getDatabase().getId()).getContainer(asyncContainer.getId());
     }
@@ -102,8 +108,8 @@ public class CosmosSyncUDFTest extends TestSuiteBase {
         container.getScripts().createUserDefinedFunction(udf);
 
         FeedOptions feedOptions = new FeedOptions();
-        
-        CosmosContinuablePagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator3 =
+
+        CosmosPagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator3 =
                 container.getScripts().readAllUserDefinedFunctions(feedOptions);
         assertThat(feedResponseIterator3.iterator().hasNext()).isTrue();
     }
@@ -115,14 +121,14 @@ public class CosmosSyncUDFTest extends TestSuiteBase {
         container.getScripts().createUserDefinedFunction(properties);
         String query = String.format("SELECT * from c where c.id = '%s'", properties.getId());
         FeedOptions feedOptions = new FeedOptions();
-        
 
-        CosmosContinuablePagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator1 =
+
+        CosmosPagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator1 =
                 container.getScripts().queryUserDefinedFunctions(query, feedOptions);
         assertThat(feedResponseIterator1.iterator().hasNext()).isTrue();
 
         SqlQuerySpec querySpec = new SqlQuerySpec(query);
-        CosmosContinuablePagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator2 =
+        CosmosPagedIterable<CosmosUserDefinedFunctionProperties> feedResponseIterator2 =
                 container.getScripts().queryUserDefinedFunctions(query, feedOptions);
         assertThat(feedResponseIterator2.iterator().hasNext()).isTrue();
     }

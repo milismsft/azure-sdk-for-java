@@ -12,15 +12,24 @@ public class ClientUnderTestBuilder extends CosmosClientBuilder {
 
     public ClientUnderTestBuilder(CosmosClientBuilder builder) {
         this.configs(builder.configs());
-        this.setConnectionPolicy(builder.getConnectionPolicy());
-        this.setConsistencyLevel(builder.getConsistencyLevel());
-        this.setKey(builder.getKey());
-        this.setEndpoint(builder.getEndpoint());
-        this.setCosmosKeyCredential(builder.getCosmosKeyCredential());
+        this.gatewayMode(builder.getGatewayConnectionConfig());
+        this.directMode(builder.getDirectConnectionConfig());
+        this.consistencyLevel(builder.getConsistencyLevel());
+        this.key(builder.getKey());
+        this.endpoint(builder.getEndpoint());
+        this.keyCredential(builder.getKeyCredential());
+        this.contentResponseOnWriteEnabled(builder.isContentResponseOnWriteEnabled());
+        this.userAgentSuffix(builder.getUserAgentSuffix());
+        this.throttlingRetryOptions(builder.getThrottlingRetryOptions());
+        this.preferredRegions(builder.getPreferredRegions());
+        this.endpointDiscoveryEnabled(builder.isEndpointDiscoveryEnabled());
+        this.multipleWriteRegionsEnabled(builder.isMultipleWriteRegionsEnabled());
+        this.readRequestsFallbackEnabled(builder.isReadRequestsFallbackEnabled());
     }
 
     @Override
     public CosmosAsyncClient buildAsyncClient() {
+        CosmosAsyncClient cosmosAsyncClient = super.buildAsyncClient();
         RxDocumentClientUnderTest rxClient;
         try {
             rxClient = new RxDocumentClientUnderTest(
@@ -29,11 +38,11 @@ public class ClientUnderTestBuilder extends CosmosClientBuilder {
                 this.getConnectionPolicy(),
                 this.getConsistencyLevel(),
                 this.configs(),
-                this.getCosmosKeyCredential());
+                this.getKeyCredential(),
+                this.isContentResponseOnWriteEnabled());
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException(e.getMessage());
         }
-        CosmosAsyncClient cosmosAsyncClient = super.buildAsyncClient();
         ReflectionUtils.setAsyncDocumentClient(cosmosAsyncClient, rxClient);
         return cosmosAsyncClient;
     }

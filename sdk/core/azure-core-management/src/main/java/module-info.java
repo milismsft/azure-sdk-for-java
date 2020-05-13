@@ -3,12 +3,14 @@
 
 module com.azure.core.management {
     requires transitive com.azure.core;
-    requires org.reactivestreams;
 
-    exports com.azure.core.management.implementation to com.fasterxml.jackson.databind;
+    exports com.azure.core.management;
+    exports com.azure.core.management.annotations;
+    exports com.azure.core.management.polling;
+    exports com.azure.core.management.serializer;
 
     opens com.azure.core.management to com.fasterxml.jackson.databind;
-    opens com.azure.core.management.implementation to com.fasterxml.jackson.databind;
+    opens com.azure.core.management.implementation.polling to com.fasterxml.jackson.databind;
 
     uses com.azure.core.http.HttpClientProvider;
 }

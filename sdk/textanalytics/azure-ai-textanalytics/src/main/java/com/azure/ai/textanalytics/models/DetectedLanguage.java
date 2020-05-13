@@ -4,45 +4,54 @@
 package com.azure.ai.textanalytics.models;
 
 import com.azure.core.annotation.Immutable;
+import com.azure.core.util.IterableStream;
 
 /**
- * The DetectedLanguage model.
+ * The {@link DetectedLanguage} model.
  */
 @Immutable
 public final class DetectedLanguage {
-    /*
+    /**
      * Long name of a detected language (e.g. English, French).
      */
     private final String name;
 
-    /*
+    /**
      * A two letter representation of the detected language according to the
      * ISO 639-1 standard (e.g. en, fr).
      */
     private final String iso6391Name;
 
-    /*
+    /**
      * A confidence score between 0 and 1. Scores close to 1 indicate 100%
      * certainty that the identified language is true.
      */
-    private final double score;
+    private final double confidenceScore;
 
     /**
-     * Creates a {@code DetectedLanguage} model that describes detected language content.
-     *
-     * @param name name of a detected language
-     * @param iso6391Name a two letter representation of the detected language according to the
-     * ISO 639-1 standard
-     * @param score a confidence score between 0 and 1
+     * An {@link IterableStream} of {@link TextAnalyticsWarning Text Analytics warnings}.
      */
-    public DetectedLanguage(String name, String iso6391Name, double score) {
+    private final IterableStream<TextAnalyticsWarning> warnings;
+
+    /**
+     * Creates a {@link DetectedLanguage} model that describes detected language content.
+     *
+     * @param name The name of a detected language.
+     * @param iso6391Name A two letter representation of the detected language according to the ISO 639-1 standard.
+     * @param confidenceScore A confidence score between 0 and 1.
+     * @param warnings An {@link IterableStream} of {@link TextAnalyticsWarning warnings}.
+     */
+    public DetectedLanguage(String name, String iso6391Name, double confidenceScore,
+                            IterableStream<TextAnalyticsWarning> warnings) {
         this.name = name;
         this.iso6391Name = iso6391Name;
-        this.score = score;
+        this.confidenceScore = confidenceScore;
+        this.warnings = warnings;
     }
 
     /**
-     * Get the name property: Long name of a detected language (e.g. English, French).
+     * Get the name property: Long name of a detected language (e.g. English,
+     * French).
      *
      * @return the name value.
      */
@@ -61,12 +70,22 @@ public final class DetectedLanguage {
     }
 
     /**
-     * Get the score property: A confidence score between 0 and 1. Scores close
-     * to 1 indicate 100% certainty that the identified language is true.
+     * Get the confidenceScore property: A confidence score between 0 and 1.
+     * Scores close to 1 indicate 100% certainty that the identified language
+     * is true.
      *
-     * @return the score value.
+     * @return the confidenceScore value.
      */
-    public double getScore() {
-        return this.score;
+    public double getConfidenceScore() {
+        return this.confidenceScore;
+    }
+
+    /**
+     * Get the {@link IterableStream} of {@link TextAnalyticsWarning Text Analytics warnings}.
+     *
+     * @return {@link IterableStream} of {@link TextAnalyticsWarning}.
+     */
+    public IterableStream<TextAnalyticsWarning> getWarnings() {
+        return this.warnings;
     }
 }

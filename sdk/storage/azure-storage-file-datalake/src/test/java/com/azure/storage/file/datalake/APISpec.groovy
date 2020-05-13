@@ -1,6 +1,13 @@
 package com.azure.storage.file.datalake
 
-import com.azure.core.http.*
+
+import com.azure.core.http.HttpClient
+import com.azure.core.http.HttpHeaders
+import com.azure.core.http.HttpPipelineCallContext
+import com.azure.core.http.HttpPipelineNextPolicy
+import com.azure.core.http.HttpRequest
+import com.azure.core.http.HttpResponse
+import com.azure.core.http.ProxyOptions
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder
 import com.azure.core.http.policy.HttpLogDetailLevel
 import com.azure.core.http.policy.HttpLogOptions
@@ -15,7 +22,12 @@ import com.azure.core.util.logging.ClientLogger
 import com.azure.identity.EnvironmentCredentialBuilder
 import com.azure.storage.common.StorageSharedKeyCredential
 import com.azure.storage.common.implementation.Constants
-import com.azure.storage.file.datalake.models.*
+import com.azure.storage.common.policy.RequestRetryOptions
+import com.azure.storage.common.policy.RetryPolicyType
+import com.azure.storage.file.datalake.models.LeaseStateType
+import com.azure.storage.file.datalake.models.ListFileSystemsOptions
+import com.azure.storage.file.datalake.models.PathAccessControlEntry
+import com.azure.storage.file.datalake.models.PathProperties
 import com.azure.storage.file.datalake.specialized.DataLakeLeaseAsyncClient
 import com.azure.storage.file.datalake.specialized.DataLakeLeaseClient
 import com.azure.storage.file.datalake.specialized.DataLakeLeaseClientBuilder
@@ -28,7 +40,6 @@ import spock.lang.Specification
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
-import java.time.Duration
 import java.time.OffsetDateTime
 import java.util.function.Supplier
 
@@ -62,7 +73,8 @@ class APISpec extends Specification {
 
     static int defaultDataSize = defaultData.remaining()
 
-    static final Flux<ByteBuffer> defaultFlux = Flux.just(defaultData).map { buffer -> buffer.duplicate() }
+    @Shared
+    public static final Flux<ByteBuffer> defaultFlux = Flux.just(defaultData).map { buffer -> buffer.duplicate() }
 
     // Prefixes for blobs and containers
     String fileSystemPrefix = "jtfs" // java test file system
@@ -111,7 +123,7 @@ class APISpec extends Specification {
 
     InterceptorManager interceptorManager
     boolean recordLiveMode
-    private TestResourceNamer resourceNamer
+    public TestResourceNamer resourceNamer
     protected String testName
     def fileSystemName
 
@@ -148,9 +160,14 @@ class APISpec extends Specification {
     }
 
     def cleanup() {
+        def cleanupClient = getServiceClientBuilder(primaryCredential,
+            String.format(defaultEndpointTemplate, primaryCredential.getAccountName()), null)
+            .retryOptions(new RequestRetryOptions(RetryPolicyType.FIXED, 3, 60, 1000, 1000, null))
+            .buildClient()
+
         def options = new ListFileSystemsOptions().setPrefix(fileSystemPrefix + testName)
-        for (FileSystemItem fileSystem : primaryDataLakeServiceClient.listFileSystems(options, Duration.ofSeconds(120))) {
-            DataLakeFileSystemClient fileSystemClient = primaryDataLakeServiceClient.getFileSystemClient(fileSystem.getName())
+        for (def fileSystem : cleanupClient.listFileSystems(options, null)) {
+            def fileSystemClient = cleanupClient.getFileSystemClient(fileSystem.getName())
 
             if (fileSystem.getProperties().getLeaseState() == LeaseStateType.LEASED) {
                 createLeaseClient(fileSystemClient).breakLeaseWithResponse(0, null, null, null)
@@ -659,11 +676,11 @@ class APISpec extends Specification {
 
     def entryIsInAcl(PathAccessControlEntry entry, List<PathAccessControlEntry> acl) {
         for (PathAccessControlEntry e : acl) {
-            if (e.defaultScope() == entry.defaultScope() &&
-                e.accessControlType().equals(entry.accessControlType()) &&
-                (e.entityID() == null && entry.entityID() == null ||
-                    e.entityID().equals(entry.entityID())) &&
-                e.permissions().equals(entry.permissions())) {
+            if (e.isInDefaultScope() == entry.isInDefaultScope() &&
+                e.getAccessControlType().equals(entry.getAccessControlType()) &&
+                (e.getEntityId() == null && entry.getEntityId() == null ||
+                    e.getEntityId().equals(entry.getEntityId())) &&
+                e.getPermissions().equals(entry.getPermissions())) {
                 return true
             }
         }

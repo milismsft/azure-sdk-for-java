@@ -3,14 +3,20 @@
 
 package com.azure.cosmos;
 
+import com.azure.core.exception.AzureException;
 import com.azure.cosmos.implementation.Constants;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.RequestTimeline;
 import com.azure.cosmos.implementation.directconnectivity.Uri;
-import org.apache.commons.lang3.StringUtils;
+import com.azure.cosmos.models.CosmosError;
+import com.azure.cosmos.models.ModelBridgeInternal;
+import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 
+import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * This class defines a custom exception type for all operations on
@@ -28,14 +34,14 @@ import java.util.Map;
  * When a transport level error happens that request is not able to reach the
  * service, an IllegalStateException is thrown instead of CosmosClientException.
  */
-public class CosmosClientException extends RuntimeException {
+public class CosmosClientException extends AzureException {
     private static final long serialVersionUID = 1L;
 
     private final int statusCode;
     private final Map<String, String> responseHeaders;
 
     private CosmosResponseDiagnostics cosmosResponseDiagnostics;
-    private RequestTimeline requestTimeline;
+    private final RequestTimeline requestTimeline;
     private CosmosError cosmosError;
 
     long lsn;
@@ -44,7 +50,7 @@ public class CosmosClientException extends RuntimeException {
     Uri requestUri;
     String resourceAddress;
 
-    CosmosClientException(int statusCode, String message, Map<String, String> responseHeaders, Throwable cause) {
+    protected CosmosClientException(int statusCode, String message, Map<String, String> responseHeaders, Throwable cause) {
         super(message, cause);
         this.statusCode = statusCode;
         this.requestTimeline = RequestTimeline.empty();
@@ -66,10 +72,10 @@ public class CosmosClientException extends RuntimeException {
      * @param statusCode the http status code of the response.
      * @param errorMessage the error message.
      */
-    CosmosClientException(int statusCode, String errorMessage) {
+    protected CosmosClientException(int statusCode, String errorMessage) {
         this(statusCode, errorMessage, null, null);
         this.cosmosError = new CosmosError();
-        cosmosError.set(Constants.Properties.MESSAGE, errorMessage);
+        ModelBridgeInternal.setProperty(cosmosError, Constants.Properties.MESSAGE, errorMessage);
     }
 
     /**
@@ -78,7 +84,7 @@ public class CosmosClientException extends RuntimeException {
      * @param statusCode the http status code of the response.
      * @param innerException the original exception.
      */
-    CosmosClientException(int statusCode, Exception innerException) {
+    protected CosmosClientException(int statusCode, Exception innerException) {
         this(statusCode, null, null, innerException);
     }
 
@@ -89,7 +95,7 @@ public class CosmosClientException extends RuntimeException {
      * @param cosmosErrorResource the error resource object.
      * @param responseHeaders the response headers.
      */
-    CosmosClientException(int statusCode, CosmosError cosmosErrorResource, Map<String, String> responseHeaders) {
+    protected CosmosClientException(int statusCode, CosmosError cosmosErrorResource, Map<String, String> responseHeaders) {
         this(/* resourceAddress */ null, statusCode, cosmosErrorResource, responseHeaders);
     }
 
@@ -102,7 +108,7 @@ public class CosmosClientException extends RuntimeException {
      * @param responseHeaders the response headers.
      */
 
-    CosmosClientException(String resourceAddress,
+    protected CosmosClientException(String resourceAddress,
                           int statusCode,
                           CosmosError cosmosErrorResource,
                           Map<String, String> responseHeaders) {
@@ -120,7 +126,7 @@ public class CosmosClientException extends RuntimeException {
      * @param responseHeaders the response headers.
      * @param resourceAddress the address of the resource the request is associated with.
      */
-    CosmosClientException(String message, Exception exception, Map<String, String> responseHeaders, int statusCode,
+    protected CosmosClientException(String message, Exception exception, Map<String, String> responseHeaders, int statusCode,
                           String resourceAddress) {
         this(statusCode, message, responseHeaders, exception);
         this.resourceAddress = resourceAddress;
@@ -191,13 +197,13 @@ public class CosmosClientException extends RuntimeException {
     }
 
     /**
-     * Gets the recommended time interval after which the client can retry failed
+     * Gets the recommended time duration after which the client can retry failed
      * requests
      *
-     * @return the recommended time interval after which the client can retry failed
+     * @return the recommended time duration after which the client can retry failed
      * requests.
      */
-    public long getRetryAfterInMilliseconds() {
+    public Duration getRetryAfterDuration() {
         long retryIntervalInMilliseconds = 0;
 
         if (this.responseHeaders != null) {
@@ -215,7 +221,7 @@ public class CosmosClientException extends RuntimeException {
         //
         // In the absence of explicit guidance from the backend, don't introduce
         // any unilateral retry delays here.
-        return retryIntervalInMilliseconds;
+        return Duration.ofMillis(retryIntervalInMilliseconds);
     }
 
     /**
@@ -241,11 +247,11 @@ public class CosmosClientException extends RuntimeException {
      *
      * @return Cosmos Response Diagnostic Statistics associated with this exception.
      */
-    public CosmosResponseDiagnostics getCosmosResponseDiagnostics() {
+    public CosmosResponseDiagnostics getResponseDiagnostics() {
         return cosmosResponseDiagnostics;
     }
 
-    CosmosClientException setCosmosResponseDiagnostics(CosmosResponseDiagnostics cosmosResponseDiagnostics) {
+    CosmosClientException setResponseDiagnostics(CosmosResponseDiagnostics cosmosResponseDiagnostics) {
         this.cosmosResponseDiagnostics = cosmosResponseDiagnostics;
         return this;
     }
@@ -255,7 +261,7 @@ public class CosmosClientException extends RuntimeException {
         return getClass().getSimpleName() + "{" + "error=" + cosmosError + ", resourceAddress='"
                    + resourceAddress + '\'' + ", statusCode=" + statusCode + ", message=" + getMessage()
                    + ", causeInfo=" + causeInfo() + ", responseHeaders=" + responseHeaders + ", requestHeaders="
-                   + requestHeaders + '}';
+                   + filterSensitiveData(requestHeaders) + '}';
     }
 
     String innerErrorMessage() {
@@ -263,7 +269,7 @@ public class CosmosClientException extends RuntimeException {
         if (cosmosError != null) {
             innerErrorMessage = cosmosError.getMessage();
             if (innerErrorMessage == null) {
-                innerErrorMessage = String.valueOf(cosmosError.get("Errors"));
+                innerErrorMessage = String.valueOf(ModelBridgeInternal.getObjectFromJsonSerializable(cosmosError, "Errors"));
             }
         }
         return innerErrorMessage;
@@ -277,7 +283,15 @@ public class CosmosClientException extends RuntimeException {
         return null;
     }
 
-    public void setResourceAddress(String resourceAddress) {
+    private List<Map.Entry<String, String>> filterSensitiveData(Map<String, String> requestHeaders) {
+        if (requestHeaders == null) {
+            return null;
+        }
+        return requestHeaders.entrySet().stream().filter(entry -> !HttpConstants.HttpHeaders.AUTHORIZATION.equalsIgnoreCase(entry.getKey()))
+                             .collect(Collectors.toList());
+    }
+
+    void setResourceAddress(String resourceAddress) {
         this.resourceAddress = resourceAddress;
     }
 }
