@@ -22,25 +22,33 @@ public class AadTokenAuthorizationHelper {
     public static final String AAD_AUTH_SCHEMA_TYPE_VALUE = "aad";
     public static final String AAD_AUTH_VERSION_VALUE = "1.0";
     public static final String AAD_AUTH_TOKEN_FORMAT = "%s=%s&%s=%s&%s=%s";
-    public static final String AAD_AUTH_TOKEN_GENERAL_SCOPE = "https://management.azure.com/.default";
+    public static final String AAD_AUTH_TOKEN_COSMOS_SCOPE = "https://cosmos.azure.com/.default";
     private static final String AUTH_PREFIX = "type=aad&ver=1.0&sig=";
     private static final Logger logger = LoggerFactory.getLogger(AadTokenAuthorizationHelper.class);
 
     /**
-     * This method will try to fetch the AAD token to access the resource and add it to the rquest headers.
+     * This method will try to fetch the AAD token to access the resource and add it to the request headers.
      *
      * @param request the request headers.
      * @param simpleTokenCache token cache that supports caching a token and refreshing it.
      * @return the request headers with authorization header updated.
      */
     public static Mono<RxDocumentServiceRequest> populateAuthorizationHeader(RxDocumentServiceRequest request, SimpleTokenCache simpleTokenCache) {
-        if (request == null) {
+        if (request == null || request.getHeaders() == null) {
             return Mono.error(new IllegalArgumentException("request"));
         }
         if (simpleTokenCache == null) {
             return Mono.error(new IllegalArgumentException("simpleTokenCache"));
         }
 
+        return getAuthorizationToken(simpleTokenCache)
+            .map(authorization -> {
+                request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
+                return request;
+            });
+    }
+
+    public static Mono<String> getAuthorizationToken(SimpleTokenCache simpleTokenCache) {
         return simpleTokenCache.getToken()
             .map(accessToken -> {
                 String authorization = String.format(AAD_AUTH_TOKEN_FORMAT,
@@ -52,9 +60,8 @@ public class AadTokenAuthorizationHelper {
                 } catch (UnsupportedEncodingException e) {
                     throw new IllegalStateException("Failed to encode authorization token.", e);
                 }
-                request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
 
-                return request;
+                return authorization;
             });
     }
 

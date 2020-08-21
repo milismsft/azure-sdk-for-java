@@ -10,6 +10,7 @@ import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.ConnectionMode;
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.DirectConnectionConfig;
+import com.azure.cosmos.implementation.http.HttpHeaders;
 import com.azure.cosmos.implementation.query.PipelinedDocumentQueryExecutionContext;
 import com.azure.cosmos.implementation.query.QueryInfo;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
@@ -89,6 +90,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     private final BaseAuthorizationTokenProvider authorizationTokenProvider;
     private final UserAgentContainer userAgentContainer;
     private final boolean hasAuthKeyResourceToken;
+    private final boolean hasAuthKeySasToken;
     private final Configs configs;
     private final boolean connectionSharingAcrossClientsEnabled;
     private AzureKeyCredential credential;
@@ -96,6 +98,7 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
     private String[] tokenCredentialScopes;
     private SimpleTokenCache tokenCredentialCache;
     private CosmosAuthorizationTokenResolver cosmosAuthorizationTokenResolver;
+    AuthorizationTokenType authorizationTokenType;
     private SessionContainer sessionContainer;
     private String firstResourceTokenFromPermissionFeed = StringUtils.EMPTY;
     private RxClientCollectionCache collectionCache;
@@ -240,27 +243,42 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         this.credential = credential;
         this.tokenCredential = tokenCredential;
         this.contentResponseOnWriteEnabled = contentResponseOnWriteEnabled;
+        this.authorizationTokenType = AuthorizationTokenType.Invalid;
 
         if (this.credential != null) {
             hasAuthKeyResourceToken = false;
+            hasAuthKeySasToken = false;
             this.authorizationTokenProvider = new BaseAuthorizationTokenProvider(this.credential);
         } else if (masterKeyOrResourceToken != null && ResourceTokenAuthorizationHelper.isResourceToken(masterKeyOrResourceToken)) {
             this.authorizationTokenProvider = null;
             hasAuthKeyResourceToken = true;
-        } else if(masterKeyOrResourceToken != null && !ResourceTokenAuthorizationHelper.isResourceToken(masterKeyOrResourceToken)) {
+            this.authorizationTokenType = AuthorizationTokenType.ResourceToken;
+            hasAuthKeySasToken = false;
+        } else if (masterKeyOrResourceToken != null && SasTokenAuthorizationHelper.isSasToken(masterKeyOrResourceToken)) {
+            this.authorizationTokenProvider = null;
+            hasAuthKeyResourceToken = false;
+            hasAuthKeySasToken = true;
+            this.authorizationTokenType = AuthorizationTokenType.SasToken;
+        } else if(masterKeyOrResourceToken != null &&
+                !ResourceTokenAuthorizationHelper.isResourceToken(masterKeyOrResourceToken) &&
+                !SasTokenAuthorizationHelper.isSasToken(masterKeyOrResourceToken)) {
             this.credential = new AzureKeyCredential(this.masterKeyOrResourceToken);
             hasAuthKeyResourceToken = false;
+            hasAuthKeySasToken = false;
+            this.authorizationTokenType = AuthorizationTokenType.PrimaryMasterKey;
             this.authorizationTokenProvider = new BaseAuthorizationTokenProvider(this.credential);
         } else {
             hasAuthKeyResourceToken = false;
+            hasAuthKeySasToken = false;
             this.authorizationTokenProvider = null;
             if (tokenCredential != null) {
                 this.tokenCredentialScopes = new String[] {
-//                    AadTokenAuthorizationHelper.AAD_AUTH_TOKEN_GENERAL_SCOPE,
+//                    AadTokenAuthorizationHelper.AAD_AUTH_TOKEN_COSMOS_WINDOWS_SCOPE
                     Utils.joinPath(serviceEndpoint.toString(), ".default")
                 };
                 this.tokenCredentialCache = new SimpleTokenCache(() -> this.tokenCredential
                     .getToken(new TokenRequestContext().addScopes(this.tokenCredentialScopes)));
+                this.authorizationTokenType = AuthorizationTokenType.AadToken;
             }
         }
 
@@ -556,37 +574,37 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
         return readFeed(options, ResourceType.Database, Database.class, Paths.DATABASES_ROOT);
     }
 
-    private String parentResourceLinkToQueryLink(String parentResouceLink, ResourceType resourceTypeEnum) {
+    private String parentResourceLinkToQueryLink(String parentResourceLink, ResourceType resourceTypeEnum) {
         switch (resourceTypeEnum) {
             case Database:
                 return Paths.DATABASES_ROOT;
 
             case DocumentCollection:
-                return Utils.joinPath(parentResouceLink, Paths.COLLECTIONS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.COLLECTIONS_PATH_SEGMENT);
 
             case Document:
-                return Utils.joinPath(parentResouceLink, Paths.DOCUMENTS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.DOCUMENTS_PATH_SEGMENT);
 
             case Offer:
                 return Paths.OFFERS_ROOT;
 
             case User:
-                return Utils.joinPath(parentResouceLink, Paths.USERS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.USERS_PATH_SEGMENT);
 
             case Permission:
-                return Utils.joinPath(parentResouceLink, Paths.PERMISSIONS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.PERMISSIONS_PATH_SEGMENT);
 
             case Attachment:
-                return Utils.joinPath(parentResouceLink, Paths.ATTACHMENTS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.ATTACHMENTS_PATH_SEGMENT);
 
             case StoredProcedure:
-                return Utils.joinPath(parentResouceLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.STORED_PROCEDURES_PATH_SEGMENT);
 
             case Trigger:
-                return Utils.joinPath(parentResouceLink, Paths.TRIGGERS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.TRIGGERS_PATH_SEGMENT);
 
             case UserDefinedFunction:
-                return Utils.joinPath(parentResouceLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
+                return Utils.joinPath(parentResourceLink, Paths.USER_DEFINED_FUNCTIONS_PATH_SEGMENT);
 
             default:
                 throw new IllegalArgumentException("resource type not supported");
@@ -1175,11 +1193,46 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             request.getHeaders().put(HttpConstants.HttpHeaders.ACCEPT, RuntimeConstants.MediaTypes.JSON);
         }
 
-        if (this.tokenCredential != null) {
-            return AadTokenAuthorizationHelper.populateAuthorizationHeader(request, this.tokenCredentialCache);
+        return populateAuthorizationHeader(request);
+    }
+
+    @Override
+    public Mono<RxDocumentServiceRequest> populateAuthorizationHeader(RxDocumentServiceRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request");
+        }
+
+        if (this.authorizationTokenType == AuthorizationTokenType.AadToken) {
+            return AadTokenAuthorizationHelper.getAuthorizationToken(this.tokenCredentialCache)
+                .map(authorization -> {
+                    request.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
+                    return request;
+                });
         } else {
             return Mono.just(request);
         }
+    }
+
+    @Override
+    public Mono<HttpHeaders> populateAuthorizationHeader(HttpHeaders httpHeaders) {
+        if (httpHeaders == null) {
+            throw new IllegalArgumentException("httpHeaders");
+        }
+
+        if (this.authorizationTokenType == AuthorizationTokenType.AadToken) {
+            return AadTokenAuthorizationHelper.getAuthorizationToken(this.tokenCredentialCache)
+                .map(authorization -> {
+                    httpHeaders.set(HttpConstants.HttpHeaders.AUTHORIZATION, authorization);
+                    return httpHeaders;
+                });
+        }
+
+        return Mono.just(httpHeaders);
+    }
+
+    @Override
+    public AuthorizationTokenType getAuthorizationTokenType() {
+        return this.authorizationTokenType;
     }
 
     @Override
@@ -1197,6 +1250,8 @@ public class RxDocumentClientImpl implements AsyncDocumentClient, IAuthorization
             return this.authorizationTokenProvider.generateKeyAuthorizationSignature(requestVerb, resourceName,
                     resourceType, headers);
         } else if (masterKeyOrResourceToken != null && hasAuthKeyResourceToken && resourceTokensMap == null) {
+            return masterKeyOrResourceToken;
+        } else if (masterKeyOrResourceToken != null && hasAuthKeySasToken) {
             return masterKeyOrResourceToken;
         } else {
             assert resourceTokensMap != null;

@@ -3,6 +3,7 @@
 
 package com.azure.cosmos.implementation.directconnectivity;
 
+import com.azure.cosmos.implementation.AadTokenAuthorizationHelper;
 import com.azure.cosmos.implementation.AuthorizationTokenType;
 import com.azure.cosmos.implementation.HttpConstants;
 import com.azure.cosmos.implementation.IAuthorizationTokenProvider;
@@ -79,6 +80,8 @@ public class BarrierRequestHelper {
             barrierLsnRequest.getHeaders().put(HttpConstants.HttpHeaders.TARGET_GLOBAL_COMMITTED_LSN, targetGlobalCommittedLsn.toString());
         }
 
+        boolean hasAadToken = false;
+
         switch (originalRequestTokenType) {
             case PrimaryMasterKey:
             case PrimaryReadonlyMasterKey:
@@ -95,7 +98,12 @@ public class BarrierRequestHelper {
 
 
             case ResourceToken:
+            case SasToken:
                 authorizationToken = request.getHeaders().get(HttpConstants.HttpHeaders.AUTHORIZATION);
+                break;
+
+            case AadToken:
+                hasAadToken = true;
                 break;
 
             default:
@@ -105,7 +113,10 @@ public class BarrierRequestHelper {
                 throw Exceptions.propagate(new InternalServerErrorException(RMResources.InternalServerError));
         }
 
-        barrierLsnRequest.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorizationToken);
+        if (!hasAadToken) {
+            barrierLsnRequest.getHeaders().put(HttpConstants.HttpHeaders.AUTHORIZATION, authorizationToken);
+        }
+
         barrierLsnRequest.requestContext = request.requestContext.clone();
 
         if (request.getPartitionKeyRangeIdentity() != null) {
@@ -119,7 +130,11 @@ public class BarrierRequestHelper {
             barrierLsnRequest.getHeaders().put(WFConstants.BackendHeaders.COLLECTION_RID, request.getHeaders().get(WFConstants.BackendHeaders.COLLECTION_RID));
         }
 
-        return Mono.just(barrierLsnRequest);
+        if (hasAadToken) {
+            return authorizationTokenProvider.populateAuthorizationHeader(barrierLsnRequest);
+        } else {
+            return Mono.just(barrierLsnRequest);
+        }
     }
 
     static boolean isCollectionHeadBarrierRequest(ResourceType resourceType, OperationType operationType) {
