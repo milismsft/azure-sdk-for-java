@@ -130,6 +130,8 @@ public final class RntbdTransportClient extends TransportClient {
 
         final Mono<StoreResponse> result = Mono.fromFuture(record.whenComplete((response, throwable) -> {
 
+            logger.error("Response received in Rntbd Transport Client");
+
             record.stage(RntbdRequestRecord.Stage.COMPLETED);
 
             if (request.requestContext.cosmosDiagnostics == null) {
@@ -142,6 +144,8 @@ public final class RntbdTransportClient extends TransportClient {
             }
 
         })).onErrorMap(throwable -> {
+
+            logger.error("ON ERROR MAP -> ", throwable);
 
             Throwable error = throwable instanceof CompletionException ? throwable.getCause() : throwable;
 

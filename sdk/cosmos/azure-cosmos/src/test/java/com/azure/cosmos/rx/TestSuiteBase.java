@@ -1041,11 +1041,13 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
         List<CosmosClientBuilder> cosmosConfigurations = new ArrayList<>();
 
         for (Protocol protocol : protocols) {
-            testConsistencies.forEach(consistencyLevel -> cosmosConfigurations.add(createDirectRxDocumentClient(consistencyLevel,
-                protocol,
-                isMultiMasterEnabled,
-                preferredLocations,
-                contentResponseOnWriteEnabled)));
+            if (protocol == Protocol.TCP) {
+                testConsistencies.forEach(consistencyLevel -> cosmosConfigurations.add(createDirectRxDocumentClient(consistencyLevel,
+                    protocol,
+                    isMultiMasterEnabled,
+                    preferredLocations,
+                    contentResponseOnWriteEnabled)));
+            }
         }
 
         cosmosConfigurations.forEach(c -> {
@@ -1058,7 +1060,7 @@ public class TestSuiteBase extends CosmosAsyncClientTest {
             );
         });
 
-        cosmosConfigurations.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, isMultiMasterEnabled, preferredLocations, contentResponseOnWriteEnabled));
+//        cosmosConfigurations.add(createGatewayRxDocumentClient(ConsistencyLevel.SESSION, isMultiMasterEnabled, preferredLocations, contentResponseOnWriteEnabled));
 
         return cosmosConfigurations.stream().map(c -> new Object[]{c}).collect(Collectors.toList()).toArray(new Object[0][]);
     }

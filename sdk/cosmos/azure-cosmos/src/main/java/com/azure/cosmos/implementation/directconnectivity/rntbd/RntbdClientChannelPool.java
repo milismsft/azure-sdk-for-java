@@ -29,6 +29,7 @@ import io.netty.util.concurrent.Promise;
 import io.netty.util.internal.ThrowableUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.net.SocketAddress;
@@ -479,6 +480,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
         this.ensureInEventLoop();
 
         if (this.isClosed()) {
+            logger.error("Pool is closed on acquire");
             promise.setFailure(POOL_CLOSED_ON_ACQUIRE);
             return;
         }
@@ -487,6 +489,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
             Channel candidate = this.pollChannel();
 
             if (candidate != null) {
+
+                logger.error("Candidate is not null");
 
                 // Fulfill this request with our candidate, assuming it's healthy
                 // If our candidate is unhealthy, notifyChannelHealthCheck will call us again
@@ -500,6 +504,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
             if (channelCount < this.maxChannels) {
 
                 if (this.connecting.compareAndSet(false, true)) {
+
+                    logger.error("In connecting state");
 
                     // Fulfill this request with a new channel, assuming we can connect one
                     // If our connection attempt fails, notifyChannelConnect will call us again
@@ -519,6 +525,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
             } else if (this.computeLoadFactor() > 0.90D) {
 
                 // All channels are swamped and we'll pick the one with the lowest pending request count
+
+                logger.error("In load factor call");
 
                 long pendingRequestCountMin = Long.MAX_VALUE;
 
@@ -541,6 +549,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
                 return;
             }
 
+            logger.error("adding it to pending acquisition queue");
             this.addTaskToPendingAcquisitionQueue(promise);
 
         } catch (Throwable cause) {
@@ -582,7 +591,9 @@ public final class RntbdClientChannelPool implements ChannelPool {
             final AcquireTask acquireTask = new AcquireTask(this, promise);
 
             if (this.pendingAcquisitions.offer(acquireTask)) {
+                logger.error("offered the task to the queue");
                 if (this.acquisitionTimeoutTask != null) {
+                    logger.error("scheduling the task");
                     acquireTask.timeoutFuture = this.executor.schedule(
                         this.acquisitionTimeoutTask,
                         this.acquisitionTimeoutInNanos,
@@ -1094,6 +1105,13 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
         while (--channelsAvailable >= 0) {
 
+            try {
+                logger.info("Sleeping for some time : {}", System.currentTimeMillis());
+                Thread.sleep(10 * 1000);
+            } catch (InterruptedException e) {
+                logger.error("Error occurred while sleeping");
+            }
+            logger.info("Acquiring task now : {}", System.currentTimeMillis());
             final AcquireTask task = this.pendingAcquisitions.poll();
 
             if (task == null) {

@@ -187,6 +187,12 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         record.whenComplete((response, error) -> {
             this.concurrentRequests.decrementAndGet();
             this.metrics.markComplete(record);
+
+            if (error != null) {
+                logger.error("Error occurred while writing", error);
+            } else {
+                logger.info("record completed successfully");
+            }
         });
 
         return record;
@@ -276,6 +282,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
             );
 
             BridgeInternal.setRequestHeaders(goneException, requestArgs.serviceRequest().getHeaders());
+            logger.info("Completing exceptionally");
             requestRecord.completeExceptionally(goneException);
         }
 

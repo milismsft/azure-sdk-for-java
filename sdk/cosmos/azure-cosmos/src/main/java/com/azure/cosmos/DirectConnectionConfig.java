@@ -15,7 +15,7 @@ import java.time.Duration;
  */
 public final class DirectConnectionConfig {
     //  Constants
-    private static final Duration DEFAULT_IDLE_ENDPOINT_TIMEOUT = Duration.ofHours(1l);
+    private static final Duration DEFAULT_IDLE_ENDPOINT_TIMEOUT = Duration.ofSeconds(8);
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(5L);
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(5L);
     private static final int DEFAULT_MAX_CONNECTIONS_PER_ENDPOINT = 130;

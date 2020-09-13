@@ -52,6 +52,7 @@ public class GoneAndRetryWithRetryPolicy extends RetryPolicyWithDiagnostics {
 
     @Override
     public Mono<ShouldRetryResult> shouldRetry(Exception exception) {
+        logger.info("In Gone And Retry With Retry Policy");
         CosmosException exceptionToThrow = null;
         Duration backoffTime = Duration.ofSeconds(0);
         Duration timeout = Duration.ofSeconds(0);
