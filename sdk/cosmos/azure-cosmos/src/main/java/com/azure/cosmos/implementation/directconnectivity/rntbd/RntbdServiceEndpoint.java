@@ -6,6 +6,7 @@ package com.azure.cosmos.implementation.directconnectivity.rntbd;
 import com.azure.cosmos.BridgeInternal;
 import com.azure.cosmos.implementation.GoneException;
 import com.azure.cosmos.implementation.directconnectivity.RntbdTransportClient;
+import com.azure.cosmos.implementation.directconnectivity.TransportException;
 import com.azure.cosmos.implementation.guava25.collect.ImmutableMap;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,7 +40,6 @@ import java.util.stream.Stream;
 import static com.azure.cosmos.implementation.HttpConstants.HttpHeaders;
 import static com.azure.cosmos.implementation.directconnectivity.RntbdTransportClient.Options;
 import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkNotNull;
-import static com.azure.cosmos.implementation.guava25.base.Preconditions.checkState;
 import static com.azure.cosmos.implementation.guava27.Strings.lenientFormat;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
@@ -62,6 +63,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     private final RntbdMetrics metrics;
     private final Provider provider;
     private final SocketAddress remoteAddress;
+    private final URI remoteURI;
     private final RntbdRequestTimer requestTimer;
     private final Tag tag;
 
@@ -76,6 +78,21 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         final RntbdRequestTimer timer,
         final URI physicalAddress) {
 
+        try {
+            this.remoteURI = new URI(
+                physicalAddress.getScheme(),
+                null,
+                physicalAddress.getHost(),
+                physicalAddress.getPort(),
+                null,
+                null,
+                null);
+        } catch (URISyntaxException error) {
+            throw new IllegalArgumentException(
+                lenientFormat("physicalAddress %s cannot be parsed as a server-based authority", physicalAddress),
+                error);
+        }
+
         final Bootstrap bootstrap = new Bootstrap()
             .channel(NioSocketChannel.class)
             .group(group)
@@ -84,7 +101,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.connectTimeoutInMillis())
             .option(ChannelOption.RCVBUF_ALLOCATOR, receiveBufferAllocator)
             .option(ChannelOption.SO_KEEPALIVE, true)
-            .remoteAddress(physicalAddress.getHost(), physicalAddress.getPort());
+            .remoteAddress(this.remoteURI.getHost(), this.remoteURI.getPort());
 
         this.channelPool = new RntbdClientChannelPool(this, bootstrap, config);
         this.remoteAddress = bootstrap.config().remoteAddress();
@@ -96,6 +113,7 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         // which can cause endpoint to close unnecessary.
         this.lastRequestNanoTime = new AtomicLong(System.nanoTime());
         this.closed = new AtomicBoolean();
+
         this.requestTimer = timer;
 
         this.tag = Tag.of(TAG_NAME, RntbdMetrics.escape(this.remoteAddress.toString()));
@@ -141,6 +159,11 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     @Override
     public SocketAddress remoteAddress() {
         return this.remoteAddress;
+    }
+
+    @Override
+    public URI remoteURI() {
+        return this.remoteURI;
     }
 
     @Override
@@ -224,7 +247,9 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     }
 
     private void throwIfClosed() {
-        checkState(!this.closed.get(), "%s is closed", this);
+        if (this.closed.get()) {
+            throw new TransportException(lenientFormat("%s is closed", this), new IllegalArgumentException());
+        }
     }
 
     private RntbdRequestRecord write(final RntbdRequestArgs requestArgs) {
@@ -244,7 +269,8 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
     }
 
     private RntbdRequestRecord writeWhenConnected(
-        final RntbdRequestRecord requestRecord, final Future<? super Channel> connected) {
+        final RntbdRequestRecord requestRecord,
+        final Future<? super Channel> connected) {
 
         if (connected.isSuccess()) {
             final Channel channel = (Channel) connected.getNow();
@@ -295,14 +321,25 @@ public final class RntbdServiceEndpoint implements RntbdEndpoint {
         }
 
         @Override
-        public void serialize(RntbdServiceEndpoint value, JsonGenerator generator, SerializerProvider provider)
-            throws IOException {
+        public void serialize(
+            final RntbdServiceEndpoint value,
+            final JsonGenerator generator,
+            final SerializerProvider provider) throws IOException {
+
+            final RntbdTransportClient transportClient = value.provider.transportClient;
+
             generator.writeStartObject();
             generator.writeNumberField("id", value.id);
-            generator.writeBooleanField("isClosed", value.isClosed());
+            generator.writeBooleanField("closed", value.isClosed());
             generator.writeNumberField("concurrentRequests", value.concurrentRequests());
             generator.writeStringField("remoteAddress", value.remoteAddress.toString());
             generator.writeObjectField("channelPool", value.channelPool);
+            generator.writeObjectFieldStart("transportClient");
+            generator.writeNumberField("id", transportClient.id());
+            generator.writeBooleanField("closed", transportClient.isClosed());
+            generator.writeNumberField("endpointCount", transportClient.endpointCount());
+            generator.writeNumberField("endpointEvictionCount", transportClient.endpointEvictionCount());
+            generator.writeEndObject();
             generator.writeEndObject();
         }
     }
