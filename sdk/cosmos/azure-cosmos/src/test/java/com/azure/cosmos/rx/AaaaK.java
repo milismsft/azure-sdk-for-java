@@ -1,9 +1,16 @@
-package com.azure.cosmos;
+package com.azure.cosmos.rx;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosAsyncClient;
+import com.azure.cosmos.CosmosAsyncContainer;
+import com.azure.cosmos.CosmosAsyncDatabase;
+import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.DirectConnectionConfig;
 import com.azure.cosmos.implementation.apachecommons.lang.StringUtils;
 import com.azure.cosmos.implementation.guava25.base.Strings;
 import com.azure.cosmos.models.CosmosItemResponse;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.cosmos.models.ThroughputProperties;
 import com.azure.cosmos.util.CosmosPagedFlux;
 import com.codahale.metrics.ConsoleReporter;
 import com.codahale.metrics.Meter;
@@ -24,10 +31,10 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class ReactorTimeoutIssue {
-    private static final Logger logger = LoggerFactory.getLogger(ReactorTimeoutIssue.class);
-    static final String DATABASE_NAME = "test_database";
-    static final String CONTAINER_NAME = "test_container";
+public class AaaaK {
+    private static final Logger logger = LoggerFactory.getLogger(AaaaK.class);
+    static final String DATABASE_NAME = "test_database2";
+    static final String CONTAINER_NAME = "test_container2";
     private static final Properties properties = System.getProperties();
     public final static String MASTER_KEY =
         properties.getProperty("ACCOUNT_KEY",
@@ -51,7 +58,7 @@ public class ReactorTimeoutIssue {
     private static final int REPORT_SECS = 20;
 
     public static void main(String[] args) {
-        ReactorTimeoutIssue m = new ReactorTimeoutIssue();
+        AaaaK m = new AaaaK();
         int numOps = 100000;
         if (args.length >= 1) {
             numOps = Integer.parseInt(args[0]);
@@ -77,14 +84,16 @@ public class ReactorTimeoutIssue {
     }
 
     private void trySetupData(CosmosAsyncClient client) {
+        ThroughputProperties throughputProperties = ThroughputProperties
+            .createManualThroughput(14000);
         client.createDatabaseIfNotExists(DATABASE_NAME)
-              .flatMap(cosmosDatabaseResponse -> {
-                  CosmosAsyncDatabase database = client.getDatabase(cosmosDatabaseResponse
-                      .getProperties()
-                      .getId());
-                  return database.createContainerIfNotExists(CONTAINER_NAME,
-                      "/myPk", 10000);
-              }).block();
+            .flatMap(cosmosDatabaseResponse -> {
+                CosmosAsyncDatabase database = client.getDatabase(cosmosDatabaseResponse
+                    .getProperties()
+                    .getId());
+                return database.createContainerIfNotExists(CONTAINER_NAME,
+                    "/myPk", throughputProperties);
+            }).block();
         asyncContainer = asyncClient.getDatabase(DATABASE_NAME).getContainer(CONTAINER_NAME);
         //  Adding sample documents
         for (int i = 0; i < 100; i++) {
@@ -105,9 +114,9 @@ public class ReactorTimeoutIssue {
         launchedMeter = metricsRegistry.meter("launched-meter");
 
         ScheduledReporter reporter = ConsoleReporter.forRegistry(metricsRegistry)
-                                                    .convertDurationsTo(TimeUnit.MILLISECONDS)
-                                                    .convertRatesTo(TimeUnit.SECONDS)
-                                                    .build();
+            .convertDurationsTo(TimeUnit.MILLISECONDS)
+            .convertRatesTo(TimeUnit.SECONDS)
+            .build();
         reporter.start(REPORT_SECS, TimeUnit.SECONDS);
 
     }
@@ -149,27 +158,27 @@ public class ReactorTimeoutIssue {
                 //  read operation
                 logger.info("Read operation");
                 itemResponseFlux = asyncContainer.readItem(item.getId(), new PartitionKey(item.getMyPk()), MyItem.class)
-                                                 .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
-                                                 .timeout(Duration.ofSeconds(5))
-                                                 .flux();
+                    .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
+                    .timeout(Duration.ofSeconds(5))
+                    .flux();
                 itemResponseFlux.subscribe(responseSubscriber);
                 return;
             case 1:
                 //  write operation
                 logger.info("Write operation");
                 itemResponseFlux = asyncContainer.createItem(new MyItem(item))
-                                                 .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
-                                                 .timeout(Duration.ofSeconds(5))
-                                                 .flux();
+                    .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
+                    .timeout(Duration.ofSeconds(5))
+                    .flux();
                 itemResponseFlux.subscribe(responseSubscriber);
                 return;
             case 2:
                 //  upsert operation
                 logger.info("Upsert operation");
                 itemResponseFlux = asyncContainer.upsertItem(item)
-                                                 .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
-                                                 .timeout(Duration.ofSeconds(5))
-                                                 .flux();
+                    .flatMap(cosmosItemResponse -> Mono.just(cosmosItemResponse.getItem()))
+                    .timeout(Duration.ofSeconds(5))
+                    .flux();
                 itemResponseFlux.subscribe(responseSubscriber);
                 return;
             case 3:
@@ -178,8 +187,8 @@ public class ReactorTimeoutIssue {
                 CosmosPagedFlux<MyItem> myItemCosmosPagedFlux = asyncContainer.queryItems("select * from c where c.id"
                     + " = '" + item.getId() + "' and c.myPk = '" + item.getMyPk() + "'", MyItem.class);
                 itemResponseFlux = myItemCosmosPagedFlux.byPage()
-                                                        .flatMap(feedResponse -> Flux.fromIterable(feedResponse.getResults()))
-                                                        .timeout(Duration.ofSeconds(5));
+                    .flatMap(feedResponse -> Flux.fromIterable(feedResponse.getResults()))
+                    .timeout(Duration.ofSeconds(5));
                 itemResponseFlux.subscribe(responseSubscriber);
                 return;
         }
