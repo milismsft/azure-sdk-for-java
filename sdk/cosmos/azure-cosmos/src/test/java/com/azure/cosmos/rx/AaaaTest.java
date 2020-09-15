@@ -25,12 +25,12 @@ public class AaaaTest {
         properties.getProperty("ACCOUNT_KEY",
             StringUtils.defaultString(Strings.emptyToNull(
                 System.getenv().get("ACCOUNT_KEY")),
-                ""));
+                "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="));
     public final static String HOST =
         properties.getProperty("ACCOUNT_HOST",
             StringUtils.defaultString(Strings.emptyToNull(
                 System.getenv().get("ACCOUNT_HOST")),
-                ""));
+                "https://localhost:8081/"));
     static final String DATABASE_NAME = "test_database";
     static final String CONTAINER_NAME = "test_container";
     static final int NUM_ITEMS = 10000;
@@ -47,7 +47,7 @@ public class AaaaTest {
                 .endpoint(HOST)
                 .key(MASTER_KEY)
                 .directMode(directConnectionConfig)
-                .consistencyLevel(ConsistencyLevel.EVENTUAL)
+                .consistencyLevel(ConsistencyLevel.SESSION)
                 .buildAsyncClient();
 
             client.createDatabaseIfNotExists(DATABASE_NAME)
@@ -62,15 +62,15 @@ public class AaaaTest {
                 }).block();
             CosmosAsyncContainer asyncContainer = client.getDatabase(DATABASE_NAME).getContainer(CONTAINER_NAME);
 
-            addItems(asyncContainer);
+//            addItems(asyncContainer);
 
-//            for (int i = 0; i < 100; i++) {
-//                MyItem item = readRandomItem(asyncContainer);
-//                try {
-//                    System.out.println("Found MyItem: " + OBJECT_MAPPER.writeValueAsString(item));
-//                } catch (Exception ex) {
-//                }
-//            }
+            for (int i = 0; i < 100000; i++) {
+                MyItem item = readRandomItem(asyncContainer);
+                try {
+                    System.out.println("Found MyItem: " + OBJECT_MAPPER.writeValueAsString(item));
+                } catch (Exception ex) {
+                }
+            }
 
         } finally {
             if (client != null) {
