@@ -59,7 +59,7 @@ public class AaaaK {
 
     public static void main(String[] args) {
         AaaaK m = new AaaaK();
-        int numOps = 100000;
+        int numOps = 50000;
         if (args.length >= 1) {
             numOps = Integer.parseInt(args[0]);
         }
