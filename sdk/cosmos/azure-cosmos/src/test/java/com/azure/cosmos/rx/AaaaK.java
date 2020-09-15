@@ -40,12 +40,12 @@ public class AaaaK {
         properties.getProperty("ACCOUNT_KEY",
             StringUtils.defaultString(Strings.emptyToNull(
                 System.getenv().get("ACCOUNT_KEY")),
-                ""));
+                "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="));
     public final static String HOST =
         properties.getProperty("ACCOUNT_HOST",
             StringUtils.defaultString(Strings.emptyToNull(
                 System.getenv().get("ACCOUNT_HOST")),
-                ""));
+                "https://localhost:8081/"));
     private CosmosAsyncClient asyncClient;
     private CosmosAsyncContainer asyncContainer;
     private Meter successMeter;

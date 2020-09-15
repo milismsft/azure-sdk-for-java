@@ -42,7 +42,8 @@ public class AaaaTest {
         System.out.println("Started");
 
         try {
-            DirectConnectionConfig directConnectionConfig = new DirectConnectionConfig().setMaxConnectionsPerEndpoint(1);
+            DirectConnectionConfig directConnectionConfig = new DirectConnectionConfig()
+                .setMaxConnectionsPerEndpoint(1);
             client = new CosmosClientBuilder()
                 .endpoint(HOST)
                 .key(MASTER_KEY)

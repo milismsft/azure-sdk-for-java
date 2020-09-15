@@ -1071,6 +1071,8 @@ public final class RntbdClientChannelPool implements ChannelPool {
     private Channel pollChannel() {
         ensureInEventLoop();
 
+//        final Channel first = this.availableChannels.pollLast();
+// Annie's change here
         Channel first;
         do {
             first = this.availableChannels.pollLast();
@@ -1340,6 +1342,7 @@ public final class RntbdClientChannelPool implements ChannelPool {
 
                     if (!channel.isActive()) {
                         this.fail(CHANNEL_CLOSED_ON_ACQUIRE);
+// Annie's change is here
                         this.pool.closeChannel(channel);
                         return;
                     }
